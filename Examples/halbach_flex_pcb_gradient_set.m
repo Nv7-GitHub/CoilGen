@@ -135,6 +135,7 @@ for i=1:numel(names)
 coil_layouts=pcb_layouts.(names{i});
 coil_title=strrep(names{i},'_',' ');
 plot_coil_track_with_resulting_bfield(coil_layouts,1,coil_title);
+plot_slit_seam(coil_layouts,1); % red: seam where the rolled board's edges meet
 plot_various_error_metrics(coil_layouts,1,coil_title);
 plot_resulting_gradient(coil_layouts,1,coil_title);
 end

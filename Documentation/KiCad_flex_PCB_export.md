@@ -161,7 +161,7 @@ view_flex_pcb_coils
 
 ![Z coil, copper read back from the board, with the resulting field](coilgen_pcb_3d_Z_gradient_bore_axis.png)
 
-The views show the actual PCB copper: the spirals with their steps between turns, the link ring and the seam gap. The field shown is the one this copper produces in the target region. Rotate the views with the rotate tool in the figure toolbar.
+The views show the actual PCB copper: the spirals with their steps between turns, the link ring and the seam. The field shown is the one this copper produces in the target region. In the 3D views, `plot_slit_seam` marks the seam (the slit where the rolled board's edges meet) as a red strip labelled "seam (PCB split)". You can call it after any 3D plot of a slit-cylinder coil: `plot_slit_seam(coil_layouts,1)`. Rotate the views with the rotate tool in the figure toolbar.
 
 ## Example results
 

@@ -27,7 +27,9 @@ coil_name=coil_names{coil_ind};
 load(fullfile(board_folder,coil_name,[coil_name '_coilgen_pcb.mat']),'coil_layouts');
 coil_title=strrep(coil_name,'_',' ');
 plot_coil_track_with_resulting_bfield(coil_layouts,1,coil_title); % 3D copper with the resulting field
+plot_slit_seam(coil_layouts,1); % red: seam where the rolled board's edges meet
 plot_3D_current_density(coil_layouts,1,coil_title);
+plot_slit_seam(coil_layouts,1);
 plot_2D_contours_with_sf(coil_layouts,1,coil_title);
 plot_various_error_metrics(coil_layouts,1,coil_title);
 plot_resulting_gradient(coil_layouts,1,coil_title);
