@@ -21,7 +21,7 @@ cd Examples
 halbach_flex_pcb_gradient_set
 ```
 
-The script designs three gradient coils for a 45 mT Halbach magnet: main field along `x`, bore along `z`, 100 mm bore, 40 mm DSV. The coils are rolled at 65, 67.5 and 70 mm diameter and are 120 mm long. The script writes the boards and a summary to `KiCad_flex_PCBs/halbach_45mT_gradient_set/`.
+The script designs three gradient coils for a 45 mT Halbach magnet: main field along `x`, bore along `z`, 100 mm bore, 40 mm DSV. The coils are rolled at 65, 67.5 and 70 mm diameter and are 120 mm long. The script writes each board as its own KiCad project folder (`.kicad_pcb` and `.kicad_pro`) in `KiCad_flex_PCBs/halbach_45mT_gradient_set/<coil>/`, plus `coil_summary.txt` for the whole set.
 
 CoilGen always optimizes the field component along its own z axis. To use it with a Halbach magnet, the coil cylinder is rotated so its axis lies along CoilGen's `x`, and the main field lies along CoilGen's `z`. The mapping to the magnet frame is written at the top of the script.
 
@@ -45,7 +45,7 @@ Check all three boards with KiCad's DRC from the command line:
 
 ```bash
 cd KiCad_flex_PCBs/halbach_45mT_gradient_set
-for f in *.kicad_pcb; do kicad-cli pcb drc --severity-all -o "${f%.kicad_pcb}_drc.rpt" "$f"; done
+for f in */*.kicad_pcb; do kicad-cli pcb drc --severity-all -o "${f%.kicad_pcb}_drc.rpt" "$f"; done
 ```
 
 ## Using it for your own coil
