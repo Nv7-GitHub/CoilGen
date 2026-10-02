@@ -34,6 +34,13 @@ addParameter(parser,'resistivity',1.72e-8,@isnumeric); %Ohm*m
 addParameter(parser,'title','CoilGen flex coil',@ischar);
 addParameter(parser,'net_prefix','',@ischar);
 addParameter(parser,'calc_inductance',true,@islogical);
+%alignment marks on F.SilkS: {direction (3x1, coil frame), label; ...}; an
+%axial line is drawn where the cylinder surface faces that direction
+addParameter(parser,'axis_marks',{},@iscell);
+addParameter(parser,'axial_label','',@ischar); %label for the +axial board direction (board up)
+%gradient direction (3x1, coil frame) that counts as positive; the pads are
+%then labelled so that current into the '+' pad gives a positive gradient
+addParameter(parser,'positive_gradient',[],@isnumeric);
 parse(parser,varargin{:});
 opt=parser.Results;
 
@@ -117,7 +124,7 @@ nets={''};
 tracks=struct('pts',{},'layer',{},'net',{},'kind',{});
 ties=struct('pa',{},'pb',{},'layer',{},'net_a',{},'net_b',{});
 vias=struct('at',{},'net',{});
-pads=struct('at',{},'net',{},'name',{},'layer',{});
+pads=struct('at',{},'net',{},'name',{},'layer',{},'label',{});
 
 lead_s=cellfun(@(g) min(g.s_in,g.s_out),group_data);
 [~,chain]=sort(lead_s);
@@ -137,7 +144,7 @@ end
 
 prev_net=[opt.net_prefix 'COIL_A'];
 nets{end+1}=prev_net;
-pads(end+1)=struct('at',j1,'net',prev_net,'name','J1','layer','F');
+pads(end+1)=struct('at',j1,'net',prev_net,'name','J1','layer','F','label','J1');
 link_start=j1;
 
 for chain_ind=1:numel(chain)
@@ -199,7 +206,7 @@ end
 end
 prev_net=out_net;
 end
-pads(end+1)=struct('at',j2,'net',prev_net,'name','J2','layer','B');
+pads(end+1)=struct('at',j2,'net',prev_net,'name','J2','layer','B','label','J2');
 nets=unique(nets,'stable');
 
 %% Board outline with the solder pad tab at the seam
@@ -209,11 +216,6 @@ a_lo=min(geo.a_min-opt.end_margin,channel.board_a(1));
 a_hi=max(geo.a_max+opt.end_margin,channel.board_a(2));
 outline=[sl a_lo; sr a_lo; sr a_hi; sl a_hi; sl tab_a+th/2; sl-tl tab_a+th/2; sl-tl tab_a-th/2; sl tab_a-th/2]';
 
-%% Write KiCad files
-board.tracks=tracks; board.ties=ties; board.vias=vias; board.pads=pads; board.nets=nets;
-board.outline=outline; board.w=w; board.opt=opt; board.geo=geo; board.channel=channel;
-write_kicad_pcb(pcb_file,board);
-write_kicad_pro(pcb_file,board);
 
 %% Evaluate the exported copper
 paths_3d={};
@@ -241,6 +243,40 @@ fitted=fit_mat*fit_coeffs;
 b_spirals=b_field(3,:)'-b_links(3,:)';
 fit_spirals=fit_mat*(fit_mat\b_spirals);
 total_len=sum(cellfun(@(q) sum(vecnorm(diff(q,1,2))),{tracks.pts}))+numel(ties)*tie_len;
+
+%% Polarity and alignment marks
+pad_sign=[1 -1];
+if ~isempty(opt.positive_gradient)
+pad_sign=pad_sign*sign(fit_coeffs(1:3)'*opt.positive_gradient(:));
+end
+sign_txt={'-','','+'};
+for pad_ind=1:2
+pads(pad_ind).label=[pads(pad_ind).name sign_txt{pad_sign(pad_ind)+2}];
+end
+silk_lines={}; silk_texts=struct('at',{},'angle',{},'text',{},'size',{});
+for mark_ind=1:size(opt.axis_marks,1)
+q=geo.rot'*opt.axis_marks{mark_ind,1}(:);
+s_mark=mod(atan2(q(2),q(1))-geo.th0,2*pi)*geo.r;
+if s_mark>geo.c_mesh, s_mark=min(max(s_mark,geo.c_mesh),geo.s_right-1); end
+silk_lines{end+1}=[s_mark s_mark; a_lo+1 a_hi-1]; %#ok<AGROW>
+for a_txt=[a_lo+4 (a_lo+a_hi)/2+4]
+silk_texts(end+1)=struct('at',[s_mark+1.2; a_txt],'angle',90,'text',opt.axis_marks{mark_ind,2},'size',1.5); %#ok<AGROW>
+end
+end
+if ~isempty(opt.axial_label)
+for s_txt=[geo.s_left+3 geo.s_right-3]
+silk_texts(end+1)=struct('at',[s_txt; a_lo+4],'angle',90,'text',[opt.axial_label ' -->'],'size',1.5); %#ok<AGROW>
+end
+end
+silk_texts(end+1)=struct('at',[geo.s_left+2; tab_a-(ps/2+2.5)],'angle',0, ...
+    'text',sprintf('%s outside, %s inside',pads(1).label,pads(2).label),'size',1); %#ok<AGROW>
+
+%% Write KiCad files
+board.tracks=tracks; board.ties=ties; board.vias=vias; board.pads=pads; board.nets=nets;
+board.outline=outline; board.w=w; board.opt=opt; board.geo=geo; board.channel=channel;
+board.silk_lines=silk_lines; board.silk_texts=silk_texts;
+write_kicad_pcb(pcb_file,board);
+write_kicad_pro(pcb_file,board);
 
 report.track_width_mm=w;
 report.min_turn_spacing_mm=min_pitch;
@@ -624,11 +660,23 @@ pad=board.pads(pad_ind);
 ps=board.opt.pad_size;
 L=pad.layer;
 fprintf(fid,'\t(footprint "CoilGen:SolderPad"\n\t\t(layer "%s.Cu")\n\t\t(uuid "%s")\n\t\t(at %.4f %.4f)\n',L,new_uuid(),kx(pad.at),ky(pad.at));
-fprintf(fid,'\t\t(property "Reference" "%s"\n\t\t\t(at 0 %.3f 0)\n\t\t\t(layer "%s.Fab")\n\t\t\t(uuid "%s")\n\t\t\t(effects\n\t\t\t\t(font\n\t\t\t\t\t(size 1 1)\n\t\t\t\t\t(thickness 0.15)\n\t\t\t\t)%s\n\t\t\t)\n\t\t)\n',pad.name,-(ps/2+1),L,new_uuid(),mirror_tag(L));
+fprintf(fid,'\t\t(property "Reference" "%s"\n\t\t\t(at 0 %.3f 0)\n\t\t\t(layer "%s.Fab")\n\t\t\t(uuid "%s")\n\t\t\t(effects\n\t\t\t\t(font\n\t\t\t\t\t(size 1 1)\n\t\t\t\t\t(thickness 0.15)\n\t\t\t\t)%s\n\t\t\t)\n\t\t)\n',pad.label,-(ps/2+1),L,new_uuid(),mirror_tag(L));
 fprintf(fid,'\t\t(property "Value" "SolderPad"\n\t\t\t(at 0 0 0)\n\t\t\t(layer "%s.Fab")\n\t\t\t(hide yes)\n\t\t\t(uuid "%s")\n\t\t\t(effects\n\t\t\t\t(font\n\t\t\t\t\t(size 1 1)\n\t\t\t\t\t(thickness 0.15)\n\t\t\t\t)%s\n\t\t\t)\n\t\t)\n',L,new_uuid(),mirror_tag(L));
 fprintf(fid,'\t\t(attr smd)\n');
 fprintf(fid,'\t\t(pad "1" smd rect\n\t\t\t(at 0 0)\n\t\t\t(size %.4f %.4f)\n\t\t\t(layers "%s.Cu" "%s.Mask")\n\t\t\t(net %d "%s")\n\t\t\t(uuid "%s")\n\t\t)\n',ps,ps,L,L,net_id(pad.net),pad.net,new_uuid());
 fprintf(fid,'\t)\n');
+end
+
+%silkscreen alignment marks and labels
+for line_ind=1:numel(board.silk_lines)
+ln=board.silk_lines{line_ind};
+fprintf(fid,'\t(gr_line\n\t\t(start %.4f %.4f)\n\t\t(end %.4f %.4f)\n\t\t(stroke\n\t\t\t(width 0.3)\n\t\t\t(type solid)\n\t\t)\n\t\t(layer "F.SilkS")\n\t\t(uuid "%s")\n\t)\n', ...
+    kx(ln(:,1)),ky(ln(:,1)),kx(ln(:,2)),ky(ln(:,2)),new_uuid());
+end
+for text_ind=1:numel(board.silk_texts)
+tx=board.silk_texts(text_ind);
+fprintf(fid,'\t(gr_text "%s"\n\t\t(at %.4f %.4f %g)\n\t\t(layer "F.SilkS")\n\t\t(uuid "%s")\n\t\t(effects\n\t\t\t(font\n\t\t\t\t(size %g %g)\n\t\t\t\t(thickness %g)\n\t\t\t)\n\t\t\t(justify left)\n\t\t)\n\t)\n', ...
+    tx.text,kx(tx.at),ky(tx.at),tx.angle,new_uuid(),tx.size,tx.size,tx.size*0.15);
 end
 
 %outline
