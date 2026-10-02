@@ -34,6 +34,8 @@ addParameter(parser,'resistivity',1.72e-8,@isnumeric); %Ohm*m
 addParameter(parser,'title','CoilGen flex coil',@ischar);
 addParameter(parser,'net_prefix','',@ischar);
 addParameter(parser,'calc_inductance',true,@islogical);
+addParameter(parser,'variable_width',true,@islogical); %widen each turn to the locally available space
+addParameter(parser,'max_track_width',4,@isnumeric);
 %alignment marks on F.SilkS: {direction (3x1, coil frame), label; ...}; an
 %axial line is drawn where the cylinder surface faces that direction
 addParameter(parser,'axis_marks',{},@iscell);
@@ -121,7 +123,7 @@ end
 
 %% Assemble board: tracks (flow order), net ties, vias, pads
 nets={''};
-tracks=struct('pts',{},'layer',{},'net',{},'kind',{});
+tracks=struct('pts',{},'layer',{},'net',{},'kind',{},'body',{},'loop_id',{});
 ties=struct('pa',{},'pb',{},'layer',{},'net_a',{},'net_b',{});
 vias=struct('at',{},'net',{});
 pads=struct('at',{},'net',{},'name',{},'layer',{},'label',{});
@@ -163,7 +165,7 @@ if n==1, out_net=top_net(1); end
 %incoming link (F) and tie into the IN lead
 in_top=[gd.s_in; h_f];
 pa=in_top-[sign(in_top(1)-link_start(1))*tie_len; 0];
-tracks(end+1)=struct('pts',[link_start pa],'layer','F','net',prev_net,'kind','link'); %#ok<AGROW>
+tracks(end+1)=struct('pts',[link_start pa],'layer','F','net',prev_net,'kind','link','body',[false false],'loop_id',0); %#ok<AGROW>
 ties(end+1)=struct('pa',pa,'pb',in_top,'layer','F','net_a',prev_net,'net_b',top_net(1)); %#ok<AGROW>
 
 %top layer: spiral in
@@ -172,10 +174,12 @@ pts=gd.open{k};
 if k==1, pts=[in_top pts]; end %#ok<AGROW>
 if k<n
 [entry,pa]=trim_path_end(gd.entry{k+1},tie_len);
-tracks(end+1)=struct('pts',[pts entry pa],'layer','F','net',top_net(k),'kind','spiral'); %#ok<AGROW>
+body=[false(1,double(k==1)) true(1,size(gd.open{k},2)) false(1,size(entry,2)+1)];
+tracks(end+1)=struct('pts',[pts entry pa],'layer','F','net',top_net(k),'kind','spiral','body',body,'loop_id',chain_ind*1000+k); %#ok<AGROW>
 ties(end+1)=struct('pa',pa,'pb',gd.open{k+1}(:,1),'layer','F','net_a',top_net(k),'net_b',top_net(k+1)); %#ok<AGROW>
 else
-tracks(end+1)=struct('pts',[pts gd.via],'layer','F','net',top_net(k),'kind','spiral'); %#ok<AGROW>
+body=[false(1,double(k==1)) true(1,size(gd.open{k},2)) false];
+tracks(end+1)=struct('pts',[pts gd.via],'layer','F','net',top_net(k),'kind','spiral','body',body,'loop_id',chain_ind*1000+k); %#ok<AGROW>
 end
 end
 vias(end+1)=struct('at',gd.via,'net',top_net(n)); %#ok<AGROW>
@@ -187,20 +191,22 @@ if k==n, pts=[gd.via pts]; end
 if k==n, net_k=top_net(n); else, net_k=bot_net(k); end
 if k>1
 [entry,pa]=trim_path_end(gd.entry{k-1},tie_len);
-tracks(end+1)=struct('pts',[pts entry pa],'layer','B','net',net_k,'kind','spiral'); %#ok<AGROW>
+body=[false(1,double(k==n)) true(1,size(gd.open{k},2)) false(1,size(entry,2)+1)];
+tracks(end+1)=struct('pts',[pts entry pa],'layer','B','net',net_k,'kind','spiral','body',body,'loop_id',chain_ind*1000+k); %#ok<AGROW>
 ties(end+1)=struct('pa',pa,'pb',gd.open{k-1}(:,1),'layer','B','net_a',net_k,'net_b',bot_net(k-1)); %#ok<AGROW>
 else
 %OUT lead to the channel and over to the via right next to the IN lead,
 %so the links continue where the current left them
 s_via=gd.s_in+d_via;
-tracks(end+1)=struct('pts',[pts [gd.s_out; h_b] [s_via; h_b]],'layer','B','net',net_k,'kind','spiral'); %#ok<AGROW>
+body=[false(1,double(k==n)) true(1,size(gd.open{k},2)) false false];
+tracks(end+1)=struct('pts',[pts [gd.s_out; h_b] [s_via; h_b]],'layer','B','net',net_k,'kind','spiral','body',body,'loop_id',chain_ind*1000+k); %#ok<AGROW>
 if ~is_last
 vias(end+1)=struct('at',[s_via; h_b],'net',net_k); %#ok<AGROW>
-tracks(end+1)=struct('pts',[[s_via; h_b] [s_via; h_f]],'layer','F','net',net_k,'kind','link'); %#ok<AGROW>
+tracks(end+1)=struct('pts',[[s_via; h_b] [s_via; h_f]],'layer','F','net',net_k,'kind','link','body',[false false],'loop_id',0); %#ok<AGROW>
 link_start=[s_via; h_f];
 else
 %last group: return on B.Cu under the links back to J2
-tracks(end+1)=struct('pts',[[s_via; h_b] [s_via; h_ret] j2],'layer','B','net',net_k,'kind','link'); %#ok<AGROW>
+tracks(end+1)=struct('pts',[[s_via; h_b] [s_via; h_ret] j2],'layer','B','net',net_k,'kind','link','body',false(1,3),'loop_id',0); %#ok<AGROW>
 end
 end
 end
@@ -215,6 +221,13 @@ tab_a=h_f;
 a_lo=min(geo.a_min-opt.end_margin,channel.board_a(1));
 a_hi=max(geo.a_max+opt.end_margin,channel.board_a(2));
 outline=[sl a_lo; sr a_lo; sr a_hi; sl a_hi; sl tab_a+th/2; sl-tl tab_a+th/2; sl-tl tab_a-th/2; sl tab_a-th/2]';
+
+%% Track widths
+if opt.variable_width
+tracks=widen_tracks(tracks,ties,vias,pads,w,[sl sr a_lo a_hi],opt);
+else
+for track_ind=1:numel(tracks), tracks(track_ind).widths=w*ones(1,size(tracks(track_ind).pts,2)-1); end
+end
 
 
 %% Evaluate the exported copper
@@ -242,7 +255,9 @@ fit_coeffs=fit_mat\b_field(3,:)';
 fitted=fit_mat*fit_coeffs;
 b_spirals=b_field(3,:)'-b_links(3,:)';
 fit_spirals=fit_mat*(fit_mat\b_spirals);
-total_len=sum(cellfun(@(q) sum(vecnorm(diff(q,1,2))),{tracks.pts}))+numel(ties)*tie_len;
+seg_len=cellfun(@(q) vecnorm(diff(q,1,2)),{tracks.pts},'UniformOutput',false);
+total_len=sum(cellfun(@sum,seg_len))+numel(ties)*tie_len;
+squares=sum(cellfun(@(l,wd) sum(l./wd),seg_len,{tracks.widths}))+numel(ties)*tie_len/w;
 
 %% Polarity and alignment marks
 pad_sign=[1 -1];
@@ -288,7 +303,10 @@ report.efficiency_mT_per_m_per_A=norm(fit_coeffs(1:3))*1e3;
 report.nonlinearity_percent=max(abs(b_field(3,:)'-fitted))/(max(fitted)-min(fitted))*100;
 report.nonlinearity_spirals_only_percent=max(abs(b_spirals-fit_spirals))/(max(fit_spirals)-min(fit_spirals))*100;
 report.track_length_m=total_len/1e3;
-report.resistance_ohm=opt.resistivity*(total_len/1e3)/((w/1e3)*(opt.copper_thickness/1e3));
+report.resistance_ohm=opt.resistivity*squares/(opt.copper_thickness/1e3);
+all_w=[tracks.widths]; all_l=[seg_len{:}];
+report.mean_track_width_mm=total_len/squares;
+report.max_track_width_mm=max(all_w);
 report.inductance_H=NaN;
 if opt.calc_inductance
 report.inductance_H=filament_inductance(paths_3d,w,opt.copper_thickness);
@@ -564,6 +582,132 @@ out=pts(:,keep);
 end
 
 
+%% ===================== variable track width =====================
+
+function tracks=widen_tracks(tracks,ties,vias,pads,w,rect,opt)
+%widen the turn bodies to the locally available space: each body piece
+%(<=1 mm) gets the largest width that keeps the clearance to the other turns
+%(which widen by the same rule), to all fixed width copper and to the edge.
+%Fixed width: leads, steps between turns, stubs, links, ties, vias, pads.
+clr=opt.clearance+0.02; w_max=opt.max_track_width; sample=0.2; %margin for the sampled distances
+
+%widenable copper: one centerline per turn (both layers share it)
+wid_pts=[]; wid_loop=[]; wid_arc=[];
+seen=[];
+for i=1:numel(tracks)
+lid=tracks(i).loop_id;
+if lid==0 || any(seen==lid), continue; end
+seen(end+1)=lid; %#ok<AGROW>
+[q,a]=densify(tracks(i).pts(:,tracks(i).body),sample);
+wid_pts=[wid_pts q]; wid_loop=[wid_loop lid*ones(1,size(q,2))]; wid_arc=[wid_arc a]; %#ok<AGROW>
+end
+
+%fixed copper with its half width
+fix_pts=[]; fix_half=[];
+for i=1:numel(tracks)
+pts=tracks(i).pts; body=tracks(i).body;
+for j=1:size(pts,2)-1
+if body(j) && body(j+1), continue; end
+q=densify(pts(:,j:j+1),sample);
+fix_pts=[fix_pts q]; fix_half=[fix_half w/2*ones(1,size(q,2))]; %#ok<AGROW>
+end
+end
+for i=1:numel(ties)
+q=densify([ties(i).pa ties(i).pb],sample);
+fix_pts=[fix_pts q]; fix_half=[fix_half w/2*ones(1,size(q,2))]; %#ok<AGROW>
+end
+fix_pts=[fix_pts [vias.at] [pads.at]];
+fix_half=[fix_half opt.via_diameter/2*ones(1,numel(vias)) opt.pad_size/sqrt(2)*ones(1,numel(pads))];
+
+%split the body segments into pieces of <=1 mm and collect sample points
+pieces=struct('track',{},'pts',{},'width',{},'is_body',{});
+q_all=[]; qa_all=[]; ql_all=[]; qp_all=[];
+for i=1:numel(tracks)
+pts=tracks(i).pts; body=tracks(i).body;
+arc0=0;
+for j=1:size(pts,2)-1
+seg=pts(:,j+1)-pts(:,j); len=norm(seg);
+if ~(body(j) && body(j+1))
+pieces(end+1)=struct('track',i,'pts',pts(:,j+1),'width',w,'is_body',false); %#ok<AGROW>
+continue;
+end
+num_pieces=max(1,ceil(len/1));
+for piece=1:num_pieces
+t0=(piece-1)/num_pieces; t1=piece/num_pieces;
+t=linspace(t0,t1,max(2,ceil((t1-t0)*len/sample)+1));
+pieces(end+1)=struct('track',i,'pts',pts(:,j)+seg*t1,'width',w,'is_body',true); %#ok<AGROW>
+q_all=[q_all pts(:,j)+seg.*t]; qa_all=[qa_all arc0+len*t]; %#ok<AGROW>
+ql_all=[ql_all tracks(i).loop_id*ones(1,numel(t))]; qp_all=[qp_all numel(pieces)*ones(1,numel(t))]; %#ok<AGROW>
+end
+arc0=arc0+len;
+end
+end
+
+%available width at all samples, batched per turn
+wq_all=zeros(1,size(q_all,2));
+for lid=unique(ql_all)
+sel=ql_all==lid;
+wq_all(sel)=available_width(q_all(:,sel),qa_all(sel),lid,wid_pts,wid_loop,wid_arc,fix_pts,fix_half,rect,clr,opt.edge_clearance);
+end
+piece_w=accumarray(qp_all',wq_all',[numel(pieces) 1],@min,inf)';
+for k=find([pieces.is_body])
+pieces(k).width=min(max(floor(piece_w(k)/0.05)*0.05,w),w_max);
+end
+
+%rebuild the tracks; merge collinear pieces of equal width
+track_of=[pieces.track];
+for i=1:numel(tracks)
+pc=pieces(track_of==i);
+new_pts=[tracks(i).pts(:,1) [pc.pts]];
+widths=[pc.width];
+keep=true(1,size(new_pts,2));
+for j=2:size(new_pts,2)-1
+d1=new_pts(:,j)-new_pts(:,j-1); d2=new_pts(:,j+1)-new_pts(:,j);
+collinear=abs(d1(1)*d2(2)-d1(2)*d2(1))<1e-9*norm(d1)*norm(d2)+1e-12 && d1'*d2>0;
+if collinear && widths(j-1)==widths(j)
+keep(j)=false;
+end
+end
+tracks(i).pts=new_pts(:,keep);
+tracks(i).widths=widths(keep(2:end));
+end
+end
+
+function wq=available_width(q,qa,lid,wid_pts,wid_loop,wid_arc,fix_pts,fix_half,rect,clr,edge_clr)
+%largest width at the query points q (arc positions qa on turn lid)
+big=1e9;
+%other turns widen by the same rule: width <= distance - clearance
+others=wid_loop~=lid;
+[~,d_other]=knnsearch(wid_pts(:,others)',q','K',1);
+c_other=d_other'-clr;
+%the same turn where it comes back close to itself (narrow tips, opening)
+same=find(wid_loop==lid);
+c_same=big*ones(1,size(q,2));
+if ~isempty(same)
+d=pdist2(q',wid_pts(:,same)');
+far=abs(qa'-wid_arc(same))>3*d+0.5;
+d(~far)=big;
+c_same=min(d,[],2)'-clr;
+end
+%fixed copper
+[idx,d_fix]=knnsearch(fix_pts',q','K',min(8,size(fix_pts,2)));
+c_fix=2*(min(d_fix-fix_half(idx),[],2)'-clr);
+%board edge
+d_edge=min([q(1,:)-rect(1); rect(2)-q(1,:); q(2,:)-rect(3); rect(4)-q(2,:)],[],1);
+c_edge=2*(d_edge-edge_clr);
+wq=min([c_other; c_same; c_fix; c_edge],[],1);
+end
+
+function [q,arc]=densify(pts,step)
+seg=vecnorm(diff(pts,1,2));
+s=[0 cumsum(seg)];
+if s(end)<1e-9, q=pts(:,1); arc=0; return; end
+arc=unique([0:step:s(end) s(end)]);
+keep=[true seg>1e-12];
+q=interp1(s(keep),pts(:,keep)',arc)';
+end
+
+
 %% ===================== field / inductance =====================
 
 function b=biot_savart_polyline(v,pts)
@@ -695,7 +839,7 @@ pts=tr.pts;
 for i=1:size(pts,2)-1
 if norm(pts(:,i+1)-pts(:,i))<1e-6, continue; end
 fprintf(fid,'\t(segment\n\t\t(start %.4f %.4f)\n\t\t(end %.4f %.4f)\n\t\t(width %.4f)\n\t\t(layer "%s")\n\t\t(net %d)\n\t\t(uuid "%s")\n\t)\n', ...
-    kx(pts(:,i)),ky(pts(:,i)),kx(pts(:,i+1)),ky(pts(:,i+1)),w,lay(tr.layer),net_id(tr.net),new_uuid());
+    kx(pts(:,i)),ky(pts(:,i)),kx(pts(:,i+1)),ky(pts(:,i+1)),tr.widths(i),lay(tr.layer),net_id(tr.net),new_uuid());
 end
 end
 
