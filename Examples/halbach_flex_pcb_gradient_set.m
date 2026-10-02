@@ -75,6 +75,15 @@ report=export_kicad_flex_pcb(coil_out,pcb_file, ...
     'via_diameter',0.6, ...
     'via_drill',0.3);
 
+%% Re-simulate the manufactured copper with CoilGen
+%read the board file back (J1 to J2), use it as the wire path of the coil
+%and evaluate the field with CoilGen's own routines
+[pcb_layouts.(coil_name).out,pcb_check]=import_kicad_flex_pcb(coil_out,pcb_file,'copper_thickness',0.035);
+report.pcb_check=pcb_check;
+%compact result of the re-simulation for the 3D views (view_flex_pcb_coils.m)
+coil_layouts=struct('out',strip_coilgen_result(pcb_layouts.(coil_name).out)); %#ok<NASGU>
+save(fullfile(coil_folder,[coil_name '_coilgen_pcb.mat']),'coil_layouts','-v7');
+
 %% Driver requirements
 current=target_gradient/report.efficiency_mT_per_m_per_A;
 report.target_gradient_mT_per_m=target_gradient;
@@ -104,5 +113,29 @@ r=results.(names{i});
 fprintf(out_id,'%-22s %.2f / %.2f / %.2f   same-net gap %.3f mm\n',names{i},r.min_track_width_mm,r.mean_track_width_mm,r.max_track_width_mm,r.min_same_net_gap_mm);
 end
 fprintf(out_id,'V_L assumes a ramp time of %.0f us to the target gradient; L is a filament estimate (+-15%%).\n',rise_time*1e6);
+fprintf(out_id,'\nCoilGen re-simulation of the copper read back from the .kicad_pcb files (J1 to J2):\n');
+fprintf(out_id,'%-22s %9s %9s %8s %16s %16s %10s\n','coil','gradient','std','R','err layout [%]','err ideal [%]','J1->J2');
+fprintf(out_id,'%-22s %9s %9s %8s %16s %16s %10s\n','','[mT/m/A]','[mT/m/A]','[Ohm]','max / mean','max / mean','polarity');
+for i=1:numel(names)
+c=results.(names{i}).pcb_check; e=c.error_vals;
+polarity={'reversed','as design'};
+fprintf(out_id,'%-22s %9.2f %9.3f %8.2f %7.2f / %5.2f %8.2f / %5.2f %10s\n',names{i},c.mean_gradient_mT_per_m_per_A,c.std_gradient_mT_per_m_per_A, ...
+    c.resistance_ohm,e.max_rel_error_layout_vs_target,e.mean_rel_error_layout_vs_target, ...
+    e.max_rel_error_unconnected_contours_vs_target,e.mean_rel_error_unconnected_contours_vs_target,polarity{1+c.current_J1_to_J2_matches_design});
+end
+fprintf(out_id,'err: deviation from the target field relative to its maximum; ideal = the same turns as closed loops on both layers.\n');
 end
 fclose(fid);
+
+
+%% Plot the re-simulated boards (MATLAB desktop only)
+if usejava('desktop')
+addpath(fullfile(pwd,'plotting'));
+for i=1:numel(names)
+coil_layouts=pcb_layouts.(names{i});
+coil_title=strrep(names{i},'_',' ');
+plot_coil_track_with_resulting_bfield(coil_layouts,1,coil_title);
+plot_various_error_metrics(coil_layouts,1,coil_title);
+plot_resulting_gradient(coil_layouts,1,coil_title);
+end
+end

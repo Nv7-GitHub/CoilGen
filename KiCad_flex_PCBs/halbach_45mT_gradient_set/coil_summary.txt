@@ -9,3 +9,11 @@ Z_gradient_bore_axis   0.70 / 1.56 / 4.00   same-net gap 0.169 mm
 Y_gradient             0.60 / 1.78 / 4.00   same-net gap 0.150 mm
 X_gradient_B0_axis     0.85 / 1.80 / 4.00   same-net gap 0.150 mm
 V_L assumes a ramp time of 100 us to the target gradient; L is a filament estimate (+-15%).
+
+CoilGen re-simulation of the copper read back from the .kicad_pcb files (J1 to J2):
+coil                    gradient       std        R   err layout [%]    err ideal [%]     J1->J2
+                        [mT/m/A]  [mT/m/A]    [Ohm]       max / mean       max / mean   polarity
+Z_gradient_bore_axis        7.35     0.048     4.14    1.36 /  0.35     1.32 /  0.29  as design
+Y_gradient                 19.52     0.260     5.20    3.34 /  1.05     0.94 /  0.28  as design
+X_gradient_B0_axis         18.88     0.052     5.04    0.58 /  0.18     0.53 /  0.12  as design
+err: deviation from the target field relative to its maximum; ideal = the same turns as closed loops on both layers.

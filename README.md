@@ -36,7 +36,14 @@ The project requires MATLAB and optionally FastHenry2 for calculation of the coi
 
 ### Flex PCB export for KiCad
 
-Cylindrical coils can be exported as 2-layer flex PCBs for KiCad, with both layers in series and design rules included so the KiCad DRC checks every turn. The coil is designed on a cylinder with an axial slit (`'create slit cylinder mesh'`), so no track crosses the seam of the rolled board. See [Documentation/KiCad_flex_PCB_export.md](Documentation/KiCad_flex_PCB_export.md) and the example `Examples/halbach_flex_pcb_gradient_set.m`, which generates a 3-axis gradient set for a small Halbach magnet.
+Cylindrical coils can be built as rolled 2-layer flex PCBs:
+- **Slit-cylinder design:** the coil is designed on a cylinder with an axial slit (`'create slit cylinder mesh'`), so no track crosses the seam of the rolled board.
+- **Export:** `export_kicad_flex_pcb` writes a KiCad board with both layers in series, variable-width traces and design rules, so KiCad's DRC checks every turn.
+- **Re-simulation:** `import_kicad_flex_pcb` reads the board back and re-simulates the manufactured copper with CoilGen. The result works with the plotting functions.
+
+See [Documentation/KiCad_flex_PCB_export.md](Documentation/KiCad_flex_PCB_export.md). The examples are:
+- `Examples/halbach_flex_pcb_gradient_set.m`, which designs, exports, checks and re-simulates a 3-axis gradient set for a small Halbach magnet;
+- `Examples/view_flex_pcb_coils.m`, which shows that set in 3D.
 
 
 ### Algorithm overview
