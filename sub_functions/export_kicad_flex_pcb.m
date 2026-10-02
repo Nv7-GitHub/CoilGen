@@ -7,7 +7,7 @@ function report=export_kicad_flex_pcb(coil_out,pcb_file,varargin)
 %both layers carry the full winding pattern and the current per turn adds up.
 %The spirals are opened towards a copper free axial channel (the end margin
 %or a free band between the groups) where the groups are linked in series
-%and led to the solder pads J1 (F.Cu) and J2 (B.Cu) on a tab at the seam.
+%and led to the solder pads J1 (F.Cu) and J2 (B.Cu) on a tab on the end edge.
 %Every turn has its own net, joined by net-tie footprints, so the KiCad DRC
 %checks the clearance between all turns.
 %
@@ -26,8 +26,8 @@ addParameter(parser,'via_drill',0.3,@isnumeric);
 addParameter(parser,'edge_clearance',0.3,@isnumeric);
 addParameter(parser,'seam_gap',0.5,@isnumeric); %gap between the two board edges at the seam when rolled
 addParameter(parser,'end_margin',1.5,@isnumeric); %board extension beyond the coil surface at the ends
-addParameter(parser,'tab_length',6,@isnumeric);
-addParameter(parser,'pad_size',2.5,@isnumeric);
+addParameter(parser,'tab_length',10,@isnumeric); %feed tab sticking out past the end of the coil
+addParameter(parser,'pad_size',3,@isnumeric);
 addParameter(parser,'copper_thickness',0.035,@isnumeric);
 addParameter(parser,'layer_gap',0.1,@isnumeric); %F.Cu to B.Cu distance, used for the field evaluation
 addParameter(parser,'resistivity',1.72e-8,@isnumeric); %Ohm*m
@@ -134,20 +134,27 @@ h_f=channel.h_f; h_ret=channel.h_ret;
 d_via=max(via_r,w/2)+w/2+clr+0.1;
 tie_len=w+0.25;
 
-%solder pads on the tab at the seam: J1 (F.Cu) feeds the chain, J2 (B.Cu,
-%directly behind J1) collects the return trace that runs back under the
-%links, so the feed is coaxial and there is no net circumferential current
+%feed tab on the end edge of the board (+axial end), next to the seam: J1
+%(F.Cu) feeds the chain, J2 (B.Cu, directly behind J1) collects the return
+%trace. Feed and return run as a stacked pair along the seam edge to the
+%channel, and the return runs back under the links, so the feed is coaxial
+%and there is no net circumferential current
 sl=geo.s_left; sr=geo.s_right; tl=opt.tab_length; ps=opt.pad_size;
-j1=[sl-1-ps/2; h_f];
-j2=[j1(1); h_ret];
-if j1(1)-ps/2<sl-tl+opt.edge_clearance
+a_lo=min(geo.a_min-opt.end_margin,channel.board_a(1));
+a_hi=max(geo.a_max+opt.end_margin,channel.board_a(2));
+th=ps+2;
+s_lead=sl+opt.edge_clearance+w/2+0.05;
+j1=[sl+th/2; a_hi+tl-1-ps/2];
+j2=j1;
+if j1(2)-ps/2<a_hi+1
 error('tab_length is too short for the solder pads.');
 end
 
 prev_net=[opt.net_prefix 'COIL_A'];
 nets{end+1}=prev_net;
 pads(end+1)=struct('at',j1,'net',prev_net,'name','J1','layer','F','label','J1');
-link_start=j1;
+tracks(end+1)=struct('pts',[j1 [s_lead; j1(2)] [s_lead; h_f]],'layer','F','net',prev_net,'kind','link','body',false(1,3),'loop_id',0);
+link_start=[s_lead; h_f];
 
 for chain_ind=1:numel(chain)
 gd=group_data{chain(chain_ind)};
@@ -206,7 +213,7 @@ tracks(end+1)=struct('pts',[[s_via; h_b] [s_via; h_f]],'layer','F','net',net_k,'
 link_start=[s_via; h_f];
 else
 %last group: return on B.Cu under the links back to J2
-tracks(end+1)=struct('pts',[[s_via; h_b] [s_via; h_ret] j2],'layer','B','net',net_k,'kind','link','body',false(1,3),'loop_id',0); %#ok<AGROW>
+tracks(end+1)=struct('pts',[[s_via; h_b] [s_via; h_ret] [s_lead; h_ret] [s_lead; j2(2)] j2],'layer','B','net',net_k,'kind','link','body',false(1,5),'loop_id',0); %#ok<AGROW>
 end
 end
 end
@@ -216,11 +223,7 @@ pads(end+1)=struct('at',j2,'net',prev_net,'name','J2','layer','B','label','J2');
 nets=unique(nets,'stable');
 
 %% Board outline with the solder pad tab at the seam
-th=ps+2;
-tab_a=h_f;
-a_lo=min(geo.a_min-opt.end_margin,channel.board_a(1));
-a_hi=max(geo.a_max+opt.end_margin,channel.board_a(2));
-outline=[sl a_lo; sr a_lo; sr a_hi; sl a_hi; sl tab_a+th/2; sl-tl tab_a+th/2; sl-tl tab_a-th/2; sl tab_a-th/2]';
+outline=[sl a_lo; sr a_lo; sr a_hi; sl+th a_hi; sl+th a_hi+tl; sl a_hi+tl]';
 
 %% Track widths
 %turns are also narrowed where they come close to themselves, which the
@@ -287,7 +290,7 @@ for s_txt=[geo.s_left+3 geo.s_right-3]
 silk_texts(end+1)=struct('at',[s_txt; a_lo+4],'angle',90,'text',[opt.axial_label ' -->'],'size',1.5); %#ok<AGROW>
 end
 end
-silk_texts(end+1)=struct('at',[geo.s_left+2; tab_a-(ps/2+2.5)],'angle',0, ...
+silk_texts(end+1)=struct('at',[sl+th+1.5; a_hi-2],'angle',0, ...
     'text',sprintf('%s outside, %s inside',pads(1).label,pads(2).label),'size',1); %#ok<AGROW>
 
 %% Write KiCad files
@@ -436,7 +439,7 @@ channel.h_f=channel.h_b_low+step;
 channel.h_ret=channel.h_f;
 channel.h_b_high=channel.h_f+step;
 if strcmp(channel.type,'end')
-channel.board_a=[inf channel.h_f+opt.pad_size/2+1.5];
+channel.board_a=[inf channel.h_f+w/2+opt.edge_clearance+0.2];
 end
 end
 
@@ -807,7 +810,7 @@ end
 %% ===================== KiCad writers =====================
 
 function write_kicad_pcb(pcb_file,board)
-x0=board.opt.tab_length+10-board.geo.s_left;
+x0=10-board.geo.s_left;
 y0=max(board.outline(2,:))+10;
 kx=@(p) p(1)+x0;
 ky=@(p) y0-p(2);
@@ -818,7 +821,7 @@ w=board.w;
 fid=fopen(pcb_file,'w');
 fprintf(fid,'(kicad_pcb\n\t(version 20240108)\n\t(generator "coilgen_export_kicad_flex_pcb")\n\t(generator_version "1.0")\n');
 fprintf(fid,'\t(general\n\t\t(thickness 0.11)\n\t\t(legacy_teardrops no)\n\t)\n\t(paper "A3")\n');
-fprintf(fid,'\t(title_block\n\t\t(title "%s")\n\t\t(comment 1 "F.Cu is the outside of the rolled cylinder; fold the J1/J2 tab outwards at the seam")\n\t\t(comment 2 "CoilGen mapping: x0=%.4f y0=%.4f layer_gap=%.4f")\n\t)\n',board.opt.title,x0,y0,board.opt.layer_gap);
+fprintf(fid,'\t(title_block\n\t\t(title "%s")\n\t\t(comment 1 "F.Cu is the outside of the rolled cylinder; J1/J2 on the tab past the end of the coil")\n\t\t(comment 2 "CoilGen mapping: x0=%.4f y0=%.4f layer_gap=%.4f")\n\t)\n',board.opt.title,x0,y0,board.opt.layer_gap);
 fprintf(fid,['\t(layers\n\t\t(0 "F.Cu" signal)\n\t\t(31 "B.Cu" signal)\n\t\t(36 "B.SilkS" user "B.Silkscreen")\n' ...
     '\t\t(37 "F.SilkS" user "F.Silkscreen")\n\t\t(38 "B.Mask" user)\n\t\t(39 "F.Mask" user)\n\t\t(44 "Edge.Cuts" user)\n' ...
     '\t\t(46 "B.CrtYd" user "B.Courtyard")\n\t\t(47 "F.CrtYd" user "F.Courtyard")\n\t\t(48 "B.Fab" user)\n\t\t(49 "F.Fab" user)\n\t)\n']);

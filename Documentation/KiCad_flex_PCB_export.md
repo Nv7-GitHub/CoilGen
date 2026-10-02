@@ -77,7 +77,7 @@ What the exporter builds:
 - **No crossovers.** Each turn is opened over `cut_width`. The step to the next turn first crosses to that turn's opening, then follows the turn's own removed section into its start, so steps never run alongside a turn.
 - **Inner via.** Each group's via is placed inside its innermost turn, as close to the opening as the clearances allow. Inner turns with no room for it are dropped and reported.
 - **Routing channel.** The spirals open towards a copper-free axial band: a free band between the groups (the centre of the Z coil) or a margin beyond the end of the coil (X and Y). The groups are linked in series there on `F.Cu`, and a return trace runs back on `B.Cu` directly under the links. Each group's output continues right next to its input. Together this leaves no net circumferential current and almost no field from the wiring.
-- **Feed tab.** A tab sits at the seam, with `J1` on `F.Cu` and `J2` on `B.Cu` directly behind it (a coaxial feed). With `positive_gradient` set, the pads are labelled `+`/`-` so that current into the `+` pad gives a positive gradient.
+- **Feed tab.** A tab on the end edge of the board (the +axial end) sticks out past the end of the coil, so the rolled seam stays clean and there is room to solder the leads. It carries `J1` on `F.Cu` and `J2` on `B.Cu` directly behind it (a coaxial feed). The tab sits next to the seam, so the three coils' tabs end up at different angles. Feed and return run as a stacked pair (`F.Cu` over `B.Cu`) along the seam edge from the tab to the routing channel. With `positive_gradient` set, the pads are labelled `+`/`-` so that current into the `+` pad gives a positive gradient.
 - **Variable trace width.** Each turn is cut into pieces of at most 1 mm, and each piece is made as wide as the space allows, up to `max_track_width`. The limits are:
   - the clearance to the neighbouring turns, which widen by the same rule;
   - the clearance to all fixed-width copper (steps, leads, links, ties, vias, pads);
@@ -102,7 +102,7 @@ Exporter options (lengths in mm):
 | `edge_clearance` | 0.3 | Copper-to-edge clearance rule. |
 | `seam_gap` | 0.5 | Gap between the two board edges at the seam once rolled. |
 | `end_margin` | 1.5 | Board extension beyond the ends of the coil surface. |
-| `tab_length`, `pad_size` | 6, 2.5 | Feed tab and solder pads. |
+| `tab_length`, `pad_size` | 10, 3 | Length of the feed tab past the end of the coil, and size of the solder pads. |
 | `copper_thickness` | 0.035 | Used for the resistance (1 oz = 0.035). |
 | `layer_gap` | 0.1 | `F.Cu`–`B.Cu` distance, used for the field check. |
 | `title`, `net_prefix` | | Board title and prefix for the net names. |
@@ -169,7 +169,7 @@ All values are for 1 oz copper and 0.15 mm clearance, with variable trace width 
 
 | Coil | Diameter | Track min/mean/max | Turns (both layers) | Efficiency | Non-linearity, 40 mm DSV | R | L | Current for target | V (R) | V (L) | Peak power |
 |---|---|---|---|---|---|---|---|---|---|---|---|
-| Z (bore axis), 28 mT/m | 65 mm | 0.70 / 1.56 / 4.0 mm | 72 | 7.35 mT/m/A | 0.69 % | 4.1 Ω | 71 µH | 3.8 A | 15.8 V | 2.7 V | 60 W |
+| Z (bore axis), 28 mT/m | 65 mm | 0.70 / 1.54 / 4.0 mm | 72 | 7.35 mT/m/A | 0.69 % | 4.2 Ω | 71 µH | 3.8 A | 16.1 V | 2.7 V | 62 W |
 | Y, 12 mT/m | 67.5 mm | 0.60 / 1.78 / 4.0 mm | 72 | 19.5 mT/m/A | 0.71 % | 5.2 Ω | 142 µH | 0.61 A | 3.2 V | 0.9 V | 2.0 W |
 | X (B0 axis), 12 mT/m | 70 mm | 0.85 / 1.80 / 4.0 mm | 72 | 18.9 mT/m/A | 0.18 % | 5.0 Ω | 143 µH | 0.64 A | 3.2 V | 0.9 V | 2.0 W |
 
@@ -177,8 +177,8 @@ CoilGen re-simulation of the copper read back from the boards. The field errors 
 
 | Coil | Gradient (mean ± spread) | R from board | Field error, board copper (max / mean) | Field error, ideal turns (max / mean) | J1→J2 |
 |---|---|---|---|---|---|
-| Z | 7.35 ± 0.05 mT/m/A | 4.14 Ω | 1.36 / 0.35 % | 1.32 / 0.29 % | design polarity |
-| Y | 19.52 ± 0.26 mT/m/A | 5.20 Ω | 3.34 / 1.05 % | 0.94 / 0.28 % | design polarity |
+| Z | 7.35 ± 0.05 mT/m/A | 4.23 Ω | 1.36 / 0.35 % | 1.32 / 0.29 % | design polarity |
+| Y | 19.52 ± 0.26 mT/m/A | 5.21 Ω | 3.34 / 1.05 % | 0.94 / 0.28 % | design polarity |
 | X | 18.88 ± 0.05 mT/m/A | 5.04 Ω | 0.58 / 0.18 % | 0.53 / 0.12 % | design polarity |
 
 The wiring adds almost nothing to the Z and X coils. On the Y coil, the extra error comes from 4 small loops that sat as side branches inside other turns. They can't be reached on two layers, so the exporter dropped them (see Limitations).
@@ -197,12 +197,13 @@ Renders of the top side (`F.Cu`):
 ## 6. Building the coils
 
 - Check the design-rule values in the `.kicad_pro` against your flex manufacturer before ordering: 0.15 mm clearance, 0.3 mm edge clearance, 0.6/0.3 mm vias, minimum trace 0.6 mm.
-- Roll each board with `F.Cu` outside. The two seam edges meet with a `seam_gap` gap, and no track crosses the seam.
+- Roll each board with `F.Cu` outside. The two seam edges meet with a `seam_gap` gap, and no track crosses the seam. The rolled boards are about 123–126 mm long, plus the 10 mm feed tab sticking out of the +Z end.
 - Turn each rolled coil so that, looking down the bore in +Z (B0 from left to right):
   - the `-X LEFT` silkscreen line sits at the left side of the bore;
   - the `+X RIGHT` line sits at the right side;
   - the `+Z into bore` arrows point down the bore.
-- Fold the feed tab outwards. Solder the leads to `J1` (outside) and `J2` (inside), and twist them. Current into the pad marked `+` gives a positive gradient; on the Y coil that is `J2`.
+- Solder the leads to `J1` (outside face of the tab) and `J2` (inside face), and twist them. Current into the pad marked `+` gives a positive gradient; on the Y coil that is `J2`.
+- Looking down the bore in +Z, the tabs come out at about 12 o'clock (Z), 1 o'clock (X, about 9 mm clockwise from Z's) and 6 o'clock (Y). None of them overlap.
 - Nest the coils: Z (65 mm) inside, then Y (67.5 mm), then X (70 mm). Line up the axial centres.
 
 ## Limitations
