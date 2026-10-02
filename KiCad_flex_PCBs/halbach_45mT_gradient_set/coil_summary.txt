@@ -4,4 +4,8 @@ coil                     track  turns       eff   nonlin       R        L       
 Z_gradient_bore_axis      0.70     72      7.35     0.69    4.14     71.4    3.81    15.8      2.7     60.1
 Y_gradient                0.95     72     19.52     0.71    5.20    141.8    0.61     3.2      0.9      2.0
 X_gradient_B0_axis        0.85     72     18.88     0.18    5.04    142.5    0.64     3.2      0.9      2.0
+Track width min/mean/max [mm] and smallest gap within a net (not checked by the KiCad DRC):
+Z_gradient_bore_axis   0.70 / 1.56 / 4.00   same-net gap 0.169 mm
+Y_gradient             0.60 / 1.78 / 4.00   same-net gap 0.150 mm
+X_gradient_B0_axis     0.85 / 1.80 / 4.00   same-net gap 0.150 mm
 V_L assumes a ramp time of 100 us to the target gradient; L is a filament estimate (+-15%).

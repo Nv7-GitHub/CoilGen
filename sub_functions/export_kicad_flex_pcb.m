@@ -223,10 +223,14 @@ a_hi=max(geo.a_max+opt.end_margin,channel.board_a(2));
 outline=[sl a_lo; sr a_lo; sr a_hi; sl a_hi; sl tab_a+th/2; sl-tl tab_a+th/2; sl-tl tab_a-th/2; sl tab_a-th/2]';
 
 %% Track widths
-if opt.variable_width
-tracks=widen_tracks(tracks,ties,vias,pads,w,[sl sr a_lo a_hi],opt);
-else
-for track_ind=1:numel(tracks), tracks(track_ind).widths=w*ones(1,size(tracks(track_ind).pts,2)-1); end
+%turns are also narrowed where they come close to themselves, which the
+%KiCad DRC can't check (same net)
+width_opt=opt;
+if ~opt.variable_width, width_opt.max_track_width=w; end
+tracks=widen_tracks(tracks,ties,vias,pads,w,[sl sr a_lo a_hi],width_opt);
+same_net_gap=min_same_net_gap(tracks);
+if same_net_gap<opt.clearance-1e-3
+warning('Copper of the same net comes within %.3f mm of itself (clearance %.2f mm).',same_net_gap,opt.clearance);
 end
 
 
@@ -307,6 +311,8 @@ report.resistance_ohm=opt.resistivity*squares/(opt.copper_thickness/1e3);
 all_w=[tracks.widths]; all_l=[seg_len{:}];
 report.mean_track_width_mm=total_len/squares;
 report.max_track_width_mm=max(all_w);
+report.min_track_width_mm=min(all_w);
+report.min_same_net_gap_mm=same_net_gap;
 report.inductance_H=NaN;
 if opt.calc_inductance
 report.inductance_H=filament_inductance(paths_3d,w,opt.copper_thickness);
@@ -644,14 +650,21 @@ end
 end
 
 %available width at all samples, batched per turn
-wq_all=zeros(1,size(q_all,2));
+wq_all=zeros(1,size(q_all,2)); ws_all=wq_all;
 for lid=unique(ql_all)
 sel=ql_all==lid;
-wq_all(sel)=available_width(q_all(:,sel),qa_all(sel),lid,wid_pts,wid_loop,wid_arc,fix_pts,fix_half,rect,clr,opt.edge_clearance);
+[wq_all(sel),ws_all(sel)]=available_width(q_all(:,sel),qa_all(sel),lid,wid_pts,wid_loop,wid_arc,fix_pts,fix_half,rect,clr,opt.edge_clearance);
 end
 piece_w=accumarray(qp_all',wq_all',[numel(pieces) 1],@min,inf)';
+piece_self=accumarray(qp_all',ws_all',[numel(pieces) 1],@min,inf)';
 for k=find([pieces.is_body])
-pieces(k).width=min(max(floor(piece_w(k)/0.05)*0.05,w),w_max);
+%the base width is clear of all other nets (checked by the DRC); where a
+%turn comes close to itself it is narrowed below the base width
+width_k=min(max(floor(piece_w(k)/0.05)*0.05,w),w_max);
+pieces(k).width=min(width_k,floor(piece_self(k)/0.05)*0.05);
+if pieces(k).width<0.1
+error('A turn comes too close to itself for a track (%.2f mm available).',piece_self(k));
+end
 end
 
 %rebuild the tracks; merge collinear pieces of equal width
@@ -673,7 +686,7 @@ tracks(i).widths=widths(keep(2:end));
 end
 end
 
-function wq=available_width(q,qa,lid,wid_pts,wid_loop,wid_arc,fix_pts,fix_half,rect,clr,edge_clr)
+function [wq,w_self]=available_width(q,qa,lid,wid_pts,wid_loop,wid_arc,fix_pts,fix_half,rect,clr,edge_clr)
 %largest width at the query points q (arc positions qa on turn lid)
 big=1e9;
 %other turns widen by the same rule: width <= distance - clearance
@@ -695,7 +708,39 @@ c_fix=2*(min(d_fix-fix_half(idx),[],2)'-clr);
 %board edge
 d_edge=min([q(1,:)-rect(1); rect(2)-q(1,:); q(2,:)-rect(3); rect(4)-q(2,:)],[],1);
 c_edge=2*(d_edge-edge_clr);
-wq=min([c_other; c_same; c_fix; c_edge],[],1);
+wq=min([c_other; c_fix; c_edge],[],1);
+w_self=c_same;
+end
+
+function gap=min_same_net_gap(tracks)
+%smallest copper gap between parts of the same net (per layer) that are far
+%apart along the path; the KiCad DRC does not check clearance within a net
+gap=inf;
+layers={tracks.layer}; nets={tracks.net};
+keys=strcat(layers,'|',nets);
+for key=unique(keys)
+sel=find(strcmp(keys,key{1}));
+pts=[]; wd=[]; arc=[]; s0=0;
+for i=sel
+p=tracks(i).pts;
+for j=1:size(p,2)-1
+len=norm(p(:,j+1)-p(:,j));
+t=linspace(0,1,max(2,ceil(len/0.05)+1));
+pts=[pts p(:,j)+(p(:,j+1)-p(:,j)).*t]; %#ok<AGROW>
+wd=[wd tracks(i).widths(j)*ones(1,numel(t))]; %#ok<AGROW>
+arc=[arc s0+len*t]; %#ok<AGROW>
+s0=s0+len;
+end
+end
+[idx,dist]=rangesearch(pts',pts',4.5);
+for i=1:numel(idx)
+j=idx{i}; d=dist{i};
+far=abs(arc(j)-arc(i))>3*d+wd(j)+wd(i)+1;
+if any(far)
+gap=min(gap,min(d(far)-(wd(j(far))+wd(i))/2));
+end
+end
+end
 end
 
 function [q,arc]=densify(pts,step)

@@ -5,3 +5,4 @@ fp-info-cache
 _autosave-*
 \#auto_saved_files\#
 *.lck
+.DS_Store

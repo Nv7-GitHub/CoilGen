@@ -98,6 +98,11 @@ fprintf(out_id,'%-22s %7.2f %6d %9.2f %8.2f %7.2f %8.1f %7.2f %7.1f %8.1f %8.1f\
     r.efficiency_mT_per_m_per_A,r.nonlinearity_percent,r.resistance_ohm,r.inductance_H*1e6,r.current_A, ...
     r.resistive_voltage_V,r.inductive_voltage_V,r.peak_power_W);
 end
+fprintf(out_id,'Track width min/mean/max [mm] and smallest gap within a net (not checked by the KiCad DRC):\n');
+for i=1:numel(names)
+r=results.(names{i});
+fprintf(out_id,'%-22s %.2f / %.2f / %.2f   same-net gap %.3f mm\n',names{i},r.min_track_width_mm,r.mean_track_width_mm,r.max_track_width_mm,r.min_same_net_gap_mm);
+end
 fprintf(out_id,'V_L assumes a ramp time of %.0f us to the target gradient; L is a filament estimate (+-15%%).\n',rise_time*1e6);
 end
 fclose(fid);
