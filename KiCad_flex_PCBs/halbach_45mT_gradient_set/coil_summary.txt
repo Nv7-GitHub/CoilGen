@@ -1,0 +1,7 @@
+
+coil                     track  turns       eff   nonlin       R        L       I     V_R      V_L   P_peak
+                          [mm]         [mT/m/A]      [%]   [Ohm]     [uH]     [A]     [V]      [V]      [W]
+Z_gradient_bore_axis      0.70     72      7.35     0.69    9.22     71.4    3.81    35.1      2.7    133.9
+Y_gradient                0.95     72     19.52     0.71    9.75    141.8    0.61     6.0      0.9      3.7
+X_gradient_B0_axis        0.85     72     18.88     0.18   10.67    142.5    0.64     6.8      0.9      4.3
+V_L assumes a ramp time of 100 us to the target gradient; L is a filament estimate (+-15%).

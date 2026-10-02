@@ -34,6 +34,11 @@ Check the documentation to get started
 The project requires MATLAB and optionally FastHenry2 for calculation of the coil inductance.  The MATLAB version should not be older than 2020A.
 
 
+### Flex PCB export for KiCad
+
+Cylindrical coils can be exported as 2-layer flex PCBs for KiCad, with both layers in series and design rules included so the KiCad DRC checks every turn. The coil is designed on a cylinder with an axial slit (`'create slit cylinder mesh'`), so no track crosses the seam of the rolled board. See [Documentation/KiCad_flex_PCB_export.md](Documentation/KiCad_flex_PCB_export.md) and the example `Examples/halbach_flex_pcb_gradient_set.m`, which generates a 3-axis gradient set for a small Halbach magnet.
+
+
 ### Algorithm overview
 
 ![plot](./Documentation/flow_chart_algorithm_revised.png)

@@ -63,6 +63,14 @@ coil_mesh=create_unique_noded_mesh(coil_mesh);
 coil_mesh.vertices=coil_mesh.vertices'; 
 coil_mesh.faces=coil_mesh.faces'; 
 
+elseif strcmp(input.coil_mesh_file,'create slit cylinder mesh')
+%cylinder with an axial slit; e.g. for flex PCBs rolled into a cylinder
+p=input.slit_cylinder_mesh_parameter_list;
+coil_mesh=build_slit_cylinder_mesh(p(1),p(2),p(3),p(4),p(5),p(6),p(7),p(8),p(9),p(10));
+coil_mesh=create_unique_noded_mesh(coil_mesh);
+coil_mesh.vertices=coil_mesh.vertices'; 
+coil_mesh.faces=coil_mesh.faces'; 
+
 end
 
 

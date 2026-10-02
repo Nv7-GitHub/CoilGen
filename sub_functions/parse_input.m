@@ -169,6 +169,11 @@ addParameter(input_parser,'circular_mesh_parameter_list',[0.25 20 1 0 0 0 0 0 0]
 % target_normal_x,target_normal_y,target_normal_z, center_x [m], center_y
 % [m], center_z [m], plate distance [mm]
 addParameter(input_parser,'biplanar_mesh_parameter_list',[0.25 0.25 20 20 1 0 0 0 0 0 0.2],@isnumeric);
+%specify the paramters for the generation of a cylindrical mesh with an axial slit
+% => cylinder_height[in m], cylinder_radius[in m], num_circular_divisions,
+% num_longitudinal_divisions, rotation_vector_x, rotation_vector_y, rotation_vector_z, rotation_angle [radian],
+% slit_center_angle [radian, atan2(y,x) before rotation], slit_width [in m]
+addParameter(input_parser,'slit_cylinder_mesh_parameter_list',[0.8 0.3 20 20 1 0 0 0 0 0.01],@isnumeric);
 %Parse the input arguments
 parse(input_parser,varargin{1}{:});
 input=input_parser.Results;
