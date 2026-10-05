@@ -71,7 +71,14 @@ warning('kicad-cli not found: KiCad DRC skipped.');
 return;
 end
 report_file=[tempname '.json'];
+%kicad-cli rewrites the .kicad_pro in its own format when it loads the
+%board; keep the file as exported
+[folder,name]=fileparts(pcb_file);
+pro_file=fullfile(folder,[name '.kicad_pro']);
+pro_text='';
+if isfile(pro_file), pro_text=fileread(pro_file); end
 [~,~]=system(sprintf('"%s" pcb drc --format json --severity-all -o "%s" "%s"',cli,report_file,pcb_file)); %output captured: kicad-cli prints font warnings
+if ~isempty(pro_text), fid=fopen(pro_file,'w'); fwrite(fid,pro_text); fclose(fid); end
 rep=jsondecode(fileread(report_file));
 delete(report_file);
 drc.ran=true;

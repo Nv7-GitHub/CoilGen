@@ -25,12 +25,24 @@ return;
 end
 [folder,name]=fileparts(pcb_file);
 step_file=fullfile(folder,[name '.step']);
+%kicad-cli rewrites the .kicad_pro in its own format when it loads the
+%board; keep the file as exported
+pro_file=fullfile(folder,[name '.kicad_pro']);
+pro_text='';
+if isfile(pro_file), pro_text=fileread(pro_file); end
 [status,output]=system(sprintf('"%s" pcb export step --force --no-components --include-tracks --include-pads --include-silkscreen -o "%s" "%s"', ...
     cli,step_file,pcb_file));
+restore_text(pro_file,pro_text);
 if status~=0 || ~isfile(step_file)
 error('STEP export of %s failed:\n%s',pcb_file,output);
 end
 if opt.zip
 zip(fullfile(folder,[name '.step.zip']),[name '.step'],folder);
 end
+end
+
+
+function restore_text(file,text)
+if isempty(text), return; end
+fid=fopen(file,'w'); fwrite(fid,text); fclose(fid);
 end
