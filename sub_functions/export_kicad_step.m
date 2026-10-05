@@ -30,8 +30,8 @@ step_file=fullfile(folder,[name '.step']);
 pro_file=fullfile(folder,[name '.kicad_pro']);
 pro_text='';
 if isfile(pro_file), pro_text=fileread(pro_file); end
-[status,output]=system(sprintf('"%s" pcb export step --force --no-components --include-tracks --include-pads --include-silkscreen -o "%s" "%s"', ...
-    cli,step_file,pcb_file));
+[status,output]=run_kicad_cli(cli,{'pcb','export','step','--force','--no-components','--include-tracks', ...
+    '--include-pads','--include-silkscreen','-o',step_file,pcb_file},300);
 restore_text(pro_file,pro_text);
 if status~=0 || ~isfile(step_file)
 error('STEP export of %s failed:\n%s',pcb_file,output);

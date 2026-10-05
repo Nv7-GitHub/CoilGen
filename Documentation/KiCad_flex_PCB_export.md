@@ -21,6 +21,7 @@ The worked example is a 3-axis gradient set for a 45 mT Halbach magnet: `Example
 | `Examples/halbach_flex_pcb_gradient_set.m` | Designs, exports, checks and re-simulates the Halbach gradient set. |
 | `sub_functions/export_kicad_step.m` | STEP model of a board (board body, copper, silkscreen) with `kicad-cli`, zipped for git. |
 | `sub_functions/find_kicad_cli.m` | Locates KiCad's command-line tool. |
+| `sub_functions/run_kicad_cli.m` | Runs `kicad-cli` with a time limit (Java `ProcessBuilder`, not `system()`). |
 | `sub_functions/check_kicad_flex_pcb.m` | Independent checks of a board file: KiCad DRC, same-net clearance, manufacturer limits, full-width field. |
 | `Examples/check_flex_pcb_boards.m` | Runs those checks on the three boards. |
 | `Examples/view_flex_pcb_coils.m` | 3D views and field plots of the re-simulated boards. |
@@ -160,7 +161,7 @@ With all the copper the STEP files are 90–125 MB, over GitHub's 100 MB limit, 
 export_kicad_step('KiCad_flex_PCBs/halbach_45mT_gradient_set/Z_gradient_bore_axis/Z_gradient_bore_axis.kicad_pcb');
 ```
 
-This needs `kicad-cli` (installed with KiCad 8 or later). It runs `kicad-cli pcb export step --no-components --include-tracks --include-pads --include-silkscreen` and zips the result.
+This needs `kicad-cli` (installed with KiCad 8 or later). All `kicad-cli` calls go through `run_kicad_cli`, which starts the process with Java's `ProcessBuilder` and a hard time limit. MATLAB's `system()` can hang on macOS after longer child processes. It runs `kicad-cli pcb export step --no-components --include-tracks --include-pads --include-silkscreen` and zips the result.
 
 > **Regenerate the STEPs whenever a board changes.** That includes a re-export from CoilGen, a new fab profile, or an edit made in KiCad. `halbach_flex_pcb_gradient_set.m` exports them automatically after every board export. After a manual edit in KiCad, run `export_kicad_step` on the edited board, then commit the new `.step.zip` together with the `.kicad_pcb`.
 
@@ -227,19 +228,23 @@ The views show the actual PCB copper: the spirals with their steps between turns
 
 All values are for the JLCPCB profile (1 oz copper, 25 µm polyimide, 0.2 mm) and 0.15 mm clearance, with variable trace width up to 4 mm. The inductance is a filament estimate (±15%), and V (L) is the voltage across it for a 100 µs ramp. The ±20 % trace width tolerance means the real resistance can be about −17 % / +25 % off the nominal value. All three boards meet every limit in the profile.
 
+The coils are 120 mm long (the board is about 123–125 mm), centred on the 40 mm target region.
+
+**24 V check (Z, the most demanding axis).** Nominal: 16.1 V + 2.7 V (100 µs ramp) ≈ 18.8 V. Worst case, with +25 % resistance from the trace width tolerance and the copper 30 °C warm (R ≈ 5.9 Ω): 22.6 V + 2.7 V ≈ 25.3 V. That is slightly over 24 V; a 150 µs ramp or 2 oz copper brings it back under. X and Y need about 4–5 V in all cases.
+
 | Coil | Diameter | Track min/mean/max | Turns (both layers) | Efficiency | Non-linearity, 40 mm DSV | R | L | Current for target | V (R) | V (L) | Peak power |
 |---|---|---|---|---|---|---|---|---|---|---|---|
-| Z (bore axis), 28 mT/m | 65 mm | 0.70 / 1.54 / 4.0 mm | 72 | 7.34 mT/m/A | 0.69 % | 4.2 Ω | 72 µH | 3.8 A | 16.1 V | 2.7 V | 62 W |
-| Y, 12 mT/m | 67.5 mm | 0.60 / 1.78 / 4.0 mm | 72 | 19.5 mT/m/A | 0.71 % | 5.2 Ω | 142 µH | 0.62 A | 3.2 V | 0.9 V | 2.0 W |
-| X (B0 axis), 12 mT/m | 70 mm | 0.85 / 1.80 / 4.0 mm | 72 | 18.9 mT/m/A | 0.18 % | 5.0 Ω | 143 µH | 0.64 A | 3.2 V | 0.9 V | 2.0 W |
+| Z (bore axis), 28 mT/m | 65 mm | 0.70 / 1.54 / 4.0 mm | 72 | 7.34 mT/m/A | 0.69 % | 4.2 Ω | 72 µH | 3.81 A | 16.1 V | 2.7 V | 62 W |
+| Y, 12 mT/m | 70 mm | 1.05 / 1.82 / 4.0 mm | 72 | 17.9 mT/m/A | 0.70 % | 5.1 Ω | 139 µH | 0.67 A | 3.4 V | 0.9 V | 2.3 W |
+| X (B0 axis), 12 mT/m | 75 mm | 1.05 / 2.19 / 4.0 mm | 62 | 14.0 mT/m/A | 0.16 % | 3.7 Ω | 115 µH | 0.86 A | 3.2 V | 1.0 V | 2.7 W |
 
 CoilGen re-simulation of the copper read back from the boards. The field errors are the deviation from the target field, relative to its maximum; "ideal" means the same turns as closed loops on both layers.
 
 | Coil | Gradient (mean ± spread) | R from board | Field error, board copper (max / mean) | Field error, ideal turns (max / mean) | J1→J2 |
 |---|---|---|---|---|---|
 | Z | 7.34 ± 0.05 mT/m/A | 4.23 Ω | 1.37 / 0.37 % | 1.33 / 0.31 % | design polarity |
-| Y | 19.49 ± 0.26 mT/m/A | 5.21 Ω | 3.44 / 1.05 % | 0.84 / 0.24 % | design polarity |
-| X | 18.86 ± 0.05 mT/m/A | 5.04 Ω | 0.61 / 0.21 % | 0.57 / 0.16 % | design polarity |
+| Y | 17.88 ± 0.19 mT/m/A | 5.05 Ω | 2.70 / 0.69 % | 0.79 / 0.19 % | design polarity |
+| X | 14.03 ± 0.03 mT/m/A | 3.73 Ω | 0.61 / 0.23 % | 0.68 / 0.30 % | design polarity |
 
 The wiring adds almost nothing to the Z and X coils. On the Y coil, the extra error comes from 4 small loops that sat as side branches inside other turns. They can't be reached on two layers, so the exporter dropped them (see Limitations).
 
@@ -258,14 +263,22 @@ Renders of the top side (`F.Cu`):
 
 - The boards are made for JLCPCB flex: 2 layers, 1 oz copper, 25 µm polyimide, 0.2 mm, ENIG, yellow coverlay. The KiCad stackup and design rules match, and all limits are met. For another manufacturer, make a new profile (see section 2) and re-export.
 - Optional: order a 0.2 mm PI stiffener under the solder tabs (JLCPCB offers it), so the tabs stay flat while soldering.
-- Roll each board with `F.Cu` outside. The two seam edges meet with a `seam_gap` gap, and no track crosses the seam. The rolled boards are about 123–126 mm long, plus the 10 mm feed tab sticking out of the +Z end.
+- Roll each board with `F.Cu` outside. The two seam edges meet with a `seam_gap` gap, and no track crosses the seam. The rolled boards are about 123–125 mm long, plus the 10 mm feed tab sticking out of the +Z end (to about +72–73 mm from the coil centre).
 - Turn each rolled coil so that, looking down the bore in +Z (B0 from left to right):
   - the `-X LEFT` silkscreen line sits at the left side of the bore;
   - the `+X RIGHT` line sits at the right side;
   - the `+Z into bore` arrows point down the bore.
 - Solder the leads to `J1` (outside face of the tab) and `J2` (inside face), and twist them. Current into the pad marked `+` gives a positive gradient; on the Y coil that is `J2`.
-- Looking down the bore in +Z, the tabs come out at about 12 o'clock (Z), 1 o'clock (X, about 9 mm clockwise from Z's) and 6 o'clock (Y). None of them overlap.
-- Nest the coils: Z (65 mm) inside, then Y (67.5 mm), then X (70 mm). Line up the axial centres.
+- **Tab and seam angles.** These are measured counterclockwise from the +X line, as seen from the +Z end (where the tabs come out) with +X to the right and +Y up. Viewed from the −Z end, use 360° − θ. Each tab starts at its coil's seam edge and is 5 mm wide.
+
+  | Coil | Diameter | Seam gap | Tab |
+  |---|---|---|---|
+  | Z | 65 mm (inner) | 269.6°–270.4° | 270.4°–279.3° |
+  | Y | 70 mm (middle) | 89.6°–90.4° | 90.4°–98.6° |
+  | X | 75 mm (outer) | 294.6°–295.4° | 295.4°–303.0° |
+
+  None of the tabs overlap. Leave 1–2° of clearance on each side of any opening for the tabs.
+- Nest the coils: Z (65 mm) inside, then Y (70 mm), then X (75 mm), 2.5 mm apart radially. Line up the axial centres.
 
 ## Limitations
 

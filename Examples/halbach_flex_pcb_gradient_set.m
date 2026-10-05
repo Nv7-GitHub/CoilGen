@@ -1,6 +1,6 @@
 %This script generates a 3-axis gradient set for a small Halbach magnet as
 %2-layer flex PCBs for KiCad: 45 mT, 100 mm bore, 40 mm DSV, coils rolled
-%at 65 / 67.5 / 70 mm diameter. Each coil is designed on a cylinder with an
+%at 65 / 70 / 75 mm diameter. Each coil is designed on a cylinder with an
 %axial slit so that no track crosses the seam of the rolled flex PCB.
 %
 %Frame of the magnet: B0 along x (Halbach), bore along z.
@@ -27,8 +27,8 @@ slit_width=0.003;           % in meter; arc length kept free of current at the s
 
 %       name                     CoilGen shape  radius [m]  slit center [deg]  target [mT/m]  positive gradient (CoilGen frame)
 coils={'Z_gradient_bore_axis',  'x',           0.0325,     90,                28,            [1;0;0]; ...   % +dBx/dz
-       'Y_gradient',            'y',           0.03375,    270,               12,            [0;-1;0]; ...  % +dBx/dy (y_magnet = -y_cg)
-       'X_gradient_B0_axis',    'z',           0.035,      115,               12,            [0;0;1]};      % +dBx/dx
+       'Y_gradient',            'y',           0.035,      270,               12,            [0;-1;0]; ...  % +dBx/dy (y_magnet = -y_cg)
+       'X_gradient_B0_axis',    'z',           0.0375,     115,               12,            [0;0;1]};      % +dBx/dx
 
 %silkscreen marks for aligning the rolled coils in the magnet: looking down
 %the bore (+z), B0 points from left (-x) to right (+x); directions in the CoilGen frame

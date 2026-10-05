@@ -8,7 +8,7 @@ candidates={cli_hint,'kicad-cli','/opt/homebrew/bin/kicad-cli','/usr/local/bin/k
 cli='';
 for c=candidates
 if isempty(c{1}), continue; end
-[status,~]=system(['"' c{1} '" version']);
+[status,~]=run_kicad_cli(c{1},{'version'},30);
 if status==0, cli=c{1}; return; end
 end
 end

@@ -31,7 +31,7 @@
       {
         "name": "Default",
         "clearance": 0.15,
-        "track_width": 0.95,
+        "track_width": 1.05,
         "via_diameter": 0.6,
         "via_drill": 0.3,
         "microvia_diameter": 0.3,

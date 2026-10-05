@@ -77,8 +77,11 @@ report_file=[tempname '.json'];
 pro_file=fullfile(folder,[name '.kicad_pro']);
 pro_text='';
 if isfile(pro_file), pro_text=fileread(pro_file); end
-[~,~]=system(sprintf('"%s" pcb drc --format json --severity-all -o "%s" "%s"',cli,report_file,pcb_file)); %output captured: kicad-cli prints font warnings
+[status,output]=run_kicad_cli(cli,{'pcb','drc','--format','json','--severity-all','-o',report_file,pcb_file},300);
 if ~isempty(pro_text), fid=fopen(pro_file,'w'); fwrite(fid,pro_text); fclose(fid); end
+if ~isfile(report_file)
+error('KiCad DRC of %s failed (status %d):\n%s',pcb_file,status,output);
+end
 rep=jsondecode(fileread(report_file));
 delete(report_file);
 drc.ran=true;
