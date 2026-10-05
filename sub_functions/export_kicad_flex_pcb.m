@@ -43,8 +43,25 @@ addParameter(parser,'axial_label','',@ischar); %label for the +axial board direc
 %gradient direction (3x1, coil frame) that counts as positive; the pads are
 %then labelled so that current into the '+' pad gives a positive gradient
 addParameter(parser,'positive_gradient',[],@isnumeric);
+%manufacturer profile (JSON, see KiCad_flex_PCBs/fab_profiles): sets the
+%design values that are not given explicitly, the stackup, the coverlay
+%openings and the KiCad design rules, and the board is checked against it
+addParameter(parser,'fab_profile','',@ischar);
 parse(parser,varargin{:});
 opt=parser.Results;
+opt.fab=[];
+if ~isempty(opt.fab_profile)
+opt.fab=jsondecode(fileread(opt.fab_profile));
+fab_values={'clearance',opt.fab.design.clearance_mm; 'edge_clearance',opt.fab.design.edge_clearance_mm; ...
+    'via_diameter',opt.fab.design.via_diameter_mm; 'via_drill',opt.fab.design.via_drill_mm; ...
+    'copper_thickness',opt.fab.stackup.copper_thickness_mm; ...
+    'layer_gap',opt.fab.stackup.dielectric_thickness_mm+opt.fab.stackup.copper_thickness_mm};
+for value_ind=1:size(fab_values,1)
+if any(strcmp(parser.UsingDefaults,fab_values{value_ind,1}))
+opt.(fab_values{value_ind,1})=fab_values{value_ind,2};
+end
+end
+end
 
 in=coil_out.input_data;
 if ~strcmp(in.coil_mesh_file,'create slit cylinder mesh')
@@ -314,6 +331,9 @@ report.resistance_ohm=opt.resistivity*squares/(opt.copper_thickness/1e3);
 all_w=[tracks.widths]; all_l=[seg_len{:}];
 report.mean_track_width_mm=total_len/squares;
 report.max_track_width_mm=max(all_w);
+if ~isempty(opt.fab)
+report.fab_check=check_fab_limits(opt,geo,w,min(all_w),[max(outline(1,:))-min(outline(1,:)) max(outline(2,:))-min(outline(2,:))]);
+end
 report.min_track_width_mm=min(all_w);
 report.min_same_net_gap_mm=same_net_gap;
 report.inductance_H=NaN;
@@ -591,6 +611,32 @@ out=pts(:,keep);
 end
 
 
+%% ===================== manufacturer check =====================
+
+function check=check_fab_limits(opt,geo,w,min_width,board_size)
+%compare the board with the manufacturer limits of the fab profile
+f=opt.fab.fab_limits; st=opt.fab.stackup;
+items={ ...
+ 'track width',                   min_width,                                   f.min_track_width_mm; ...
+ 'clearance',                     opt.clearance,                               f.min_clearance_mm; ...
+ 'via ring to track',             opt.clearance,                               f.min_via_ring_to_track_mm; ...
+ 'via drill',                     opt.via_drill,                               f.min_via_drill_mm; ...
+ 'via diameter',                  opt.via_diameter,                            f.min_via_diameter_mm; ...
+ 'via drill to other copper',     opt.clearance+(opt.via_diameter-opt.via_drill)/2, f.min_hole_to_copper_mm; ...
+ 'copper to board edge',          opt.edge_clearance,                          f.min_copper_to_edge_mm; ...
+ 'bend radius / thickness',       geo.r/st.board_thickness_mm,                 f.min_bend_radius_factor; ...
+ 'board fits (short side margin)', min(f.max_board_size_mm)-min(board_size),   0; ...
+ 'board fits (long side margin)',  max(f.max_board_size_mm)-max(board_size),   0};
+check=struct('item',items(:,1),'value',items(:,2),'limit',items(:,3));
+for i=1:numel(check)
+check(i).ok=check(i).value>=check(i).limit-1e-9;
+if ~check(i).ok
+warning('Fab limit not met: %s = %.4g (limit %.4g, %s).',check(i).item,check(i).value,check(i).limit,opt.fab.name);
+end
+end
+end
+
+
 %% ===================== variable track width =====================
 
 function tracks=widen_tracks(tracks,ties,vias,pads,w,rect,opt)
@@ -820,12 +866,31 @@ w=board.w;
 
 fid=fopen(pcb_file,'w');
 fprintf(fid,'(kicad_pcb\n\t(version 20240108)\n\t(generator "coilgen_export_kicad_flex_pcb")\n\t(generator_version "1.0")\n');
-fprintf(fid,'\t(general\n\t\t(thickness 0.11)\n\t\t(legacy_teardrops no)\n\t)\n\t(paper "A3")\n');
+board_thickness=0.11; mask_expansion=0;
+if ~isempty(board.opt.fab)
+board_thickness=board.opt.fab.stackup.board_thickness_mm;
+mask_expansion=board.opt.fab.fab_limits.coverlay_opening_expansion_mm;
+end
+fprintf(fid,'\t(general\n\t\t(thickness %.4f)\n\t\t(legacy_teardrops no)\n\t)\n\t(paper "A3")\n',board_thickness);
 fprintf(fid,'\t(title_block\n\t\t(title "%s")\n\t\t(comment 1 "F.Cu is the outside of the rolled cylinder; J1/J2 on the tab past the end of the coil")\n\t\t(comment 2 "CoilGen mapping: x0=%.4f y0=%.4f layer_gap=%.4f")\n\t)\n',board.opt.title,x0,y0,board.opt.layer_gap);
 fprintf(fid,['\t(layers\n\t\t(0 "F.Cu" signal)\n\t\t(31 "B.Cu" signal)\n\t\t(36 "B.SilkS" user "B.Silkscreen")\n' ...
     '\t\t(37 "F.SilkS" user "F.Silkscreen")\n\t\t(38 "B.Mask" user)\n\t\t(39 "F.Mask" user)\n\t\t(44 "Edge.Cuts" user)\n' ...
     '\t\t(46 "B.CrtYd" user "B.Courtyard")\n\t\t(47 "F.CrtYd" user "F.Courtyard")\n\t\t(48 "B.Fab" user)\n\t\t(49 "F.Fab" user)\n\t)\n']);
-fprintf(fid,'\t(setup\n\t\t(pad_to_mask_clearance 0)\n\t\t(allow_soldermask_bridges_in_footprints no)\n\t)\n');
+fprintf(fid,'\t(setup\n');
+if ~isempty(board.opt.fab)
+st=board.opt.fab.stackup;
+fprintf(fid,'\t\t(stackup\n');
+fprintf(fid,'\t\t\t(layer "F.SilkS"\n\t\t\t\t(type "Top Silk Screen")\n\t\t\t)\n');
+fprintf(fid,'\t\t\t(layer "F.Mask"\n\t\t\t\t(type "Top Solder Mask")\n\t\t\t\t(color "%s")\n\t\t\t\t(thickness %.4f)\n\t\t\t\t(material "%s")\n\t\t\t)\n',st.coverlay_color,st.coverlay_thickness_mm,st.coverlay_material);
+fprintf(fid,'\t\t\t(layer "F.Cu"\n\t\t\t\t(type "copper")\n\t\t\t\t(thickness %.4f)\n\t\t\t)\n',st.copper_thickness_mm);
+fprintf(fid,'\t\t\t(layer "dielectric 1"\n\t\t\t\t(type "core")\n\t\t\t\t(thickness %.4f)\n\t\t\t\t(material "%s")\n\t\t\t\t(epsilon_r %g)\n\t\t\t\t(loss_tangent %g)\n\t\t\t)\n', ...
+    st.dielectric_thickness_mm,st.dielectric_material,st.dielectric_epsilon_r,st.dielectric_loss_tangent);
+fprintf(fid,'\t\t\t(layer "B.Cu"\n\t\t\t\t(type "copper")\n\t\t\t\t(thickness %.4f)\n\t\t\t)\n',st.copper_thickness_mm);
+fprintf(fid,'\t\t\t(layer "B.Mask"\n\t\t\t\t(type "Bottom Solder Mask")\n\t\t\t\t(color "%s")\n\t\t\t\t(thickness %.4f)\n\t\t\t\t(material "%s")\n\t\t\t)\n',st.coverlay_color,st.coverlay_thickness_mm,st.coverlay_material);
+fprintf(fid,'\t\t\t(layer "B.SilkS"\n\t\t\t\t(type "Bottom Silk Screen")\n\t\t\t)\n');
+fprintf(fid,'\t\t\t(copper_finish "%s")\n\t\t\t(dielectric_constraints no)\n\t\t)\n',st.surface_finish);
+end
+fprintf(fid,'\t\t(pad_to_mask_clearance %.4f)\n\t\t(allow_soldermask_bridges_in_footprints no)\n\t)\n',mask_expansion);
 for net_ind=1:numel(board.nets)
 fprintf(fid,'\t(net %d "%s")\n',net_ind-1,board.nets{net_ind});
 end
@@ -909,6 +974,7 @@ function write_kicad_pro(pcb_file,board)
 [folder,name]=fileparts(pcb_file);
 o=board.opt;
 pro.board.design_settings.defaults.board_outline_line_width=0.05;
+if isempty(o.fab)
 pro.board.design_settings.rules.min_clearance=o.clearance;
 pro.board.design_settings.rules.min_copper_edge_clearance=o.edge_clearance;
 pro.board.design_settings.rules.min_track_width=0.1;
@@ -917,6 +983,22 @@ pro.board.design_settings.rules.min_via_annular_width=(o.via_diameter-o.via_dril
 pro.board.design_settings.rules.min_through_hole_diameter=o.via_drill;
 pro.board.design_settings.rules.min_hole_clearance=0.2;
 pro.board.design_settings.rules.min_hole_to_hole=0.25;
+else
+%manufacturer limits; the net class below holds the (larger) design values
+f=o.fab.fab_limits;
+pro.board.design_settings.rules.min_clearance=f.min_clearance_mm;
+pro.board.design_settings.rules.min_copper_edge_clearance=f.min_copper_to_edge_mm;
+pro.board.design_settings.rules.min_track_width=f.min_track_width_mm;
+pro.board.design_settings.rules.min_via_diameter=f.min_via_diameter_mm;
+pro.board.design_settings.rules.min_via_annular_width=round((f.min_via_diameter_mm-f.min_via_drill_mm)/2,4);
+pro.board.design_settings.rules.min_through_hole_diameter=f.min_via_drill_mm;
+pro.board.design_settings.rules.min_hole_clearance=f.min_hole_to_copper_mm;
+pro.board.design_settings.rules.min_hole_to_hole=f.min_hole_to_hole_mm;
+pro.board.design_settings.rules.min_text_height=f.min_silk_text_height_mm;
+pro.board.design_settings.rules.min_text_thickness=f.min_silk_line_width_mm;
+pro.board.design_settings.rules.min_silk_clearance=f.min_silk_to_pad_mm;
+pro.board.design_settings.rules.solder_mask_to_copper_clearance=f.coverlay_opening_to_track_mm;
+end
 pro.board.design_settings.rule_severities.lib_footprint_issues='ignore';
 pro.board.design_settings.rule_severities.lib_footprint_mismatch='ignore';
 pro.board.design_settings.rule_severities.silk_over_copper='ignore';

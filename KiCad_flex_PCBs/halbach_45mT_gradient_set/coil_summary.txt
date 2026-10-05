@@ -1,9 +1,9 @@
 
 coil                     track  turns       eff   nonlin       R        L       I     V_R      V_L   P_peak
                           [mm]         [mT/m/A]      [%]   [Ohm]     [uH]     [A]     [V]      [V]      [W]
-Z_gradient_bore_axis      0.70     72      7.35     0.69    4.23     71.4    3.81    16.1      2.7     61.5
-Y_gradient                0.95     72     19.52     0.71    5.21    141.8    0.61     3.2      0.9      2.0
-X_gradient_B0_axis        0.85     72     18.88     0.18    5.04    142.5    0.64     3.2      0.9      2.0
+Z_gradient_bore_axis      0.70     72      7.34     0.69    4.23     71.8    3.81    16.1      2.7     61.6
+Y_gradient                0.95     72     19.49     0.71    5.21    142.3    0.62     3.2      0.9      2.0
+X_gradient_B0_axis        0.85     72     18.86     0.18    5.04    143.1    0.64     3.2      0.9      2.0
 Track width min/mean/max [mm] and smallest gap within a net (not checked by the KiCad DRC):
 Z_gradient_bore_axis   0.70 / 1.54 / 4.00   same-net gap 0.169 mm
 Y_gradient             0.60 / 1.78 / 4.00   same-net gap 0.150 mm
@@ -13,7 +13,13 @@ V_L assumes a ramp time of 100 us to the target gradient; L is a filament estima
 CoilGen re-simulation of the copper read back from the .kicad_pcb files (J1 to J2):
 coil                    gradient       std        R   err layout [%]    err ideal [%]     J1->J2
                         [mT/m/A]  [mT/m/A]    [Ohm]       max / mean       max / mean   polarity
-Z_gradient_bore_axis        7.35     0.048     4.23    1.36 /  0.35     1.32 /  0.29  as design
-Y_gradient                 19.52     0.260     5.21    3.34 /  1.05     0.94 /  0.28  as design
-X_gradient_B0_axis         18.88     0.052     5.04    0.58 /  0.18     0.53 /  0.12  as design
+Z_gradient_bore_axis        7.34     0.048     4.23    1.37 /  0.37     1.33 /  0.31  as design
+Y_gradient                 19.49     0.259     5.21    3.44 /  1.05     0.84 /  0.24  as design
+X_gradient_B0_axis         18.86     0.052     5.04    0.61 /  0.21     0.57 /  0.16  as design
 err: deviation from the target field relative to its maximum; ideal = the same turns as closed loops on both layers.
+
+Manufacturer check against JLCPCB flex, 2 layers, 1 oz outer copper, 25 um polyimide dielectric, 0.2 mm:
+Z_gradient_bore_axis   all limits met (min track 0.70 mm, board 203.7 x 133.0 mm)
+Y_gradient             all limits met (min track 0.60 mm, board 211.6 x 133.9 mm)
+X_gradient_B0_axis     all limits met (min track 0.85 mm, board 219.4 x 134.0 mm)
+Resistance tolerance from the +-20% track width tolerance: about -17% / +25%.

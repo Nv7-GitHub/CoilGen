@@ -43,7 +43,10 @@ Cylindrical coils can be built as rolled 2-layer flex PCBs:
 
 See [Documentation/KiCad_flex_PCB_export.md](Documentation/KiCad_flex_PCB_export.md). The examples are:
 - `Examples/halbach_flex_pcb_gradient_set.m`, which designs, exports, checks and re-simulates a 3-axis gradient set for a small Halbach magnet;
-- `Examples/view_flex_pcb_coils.m`, which shows that set in 3D.
+- `Examples/view_flex_pcb_coils.m`, which shows that set in 3D;
+- `Examples/check_flex_pcb_boards.m`, which runs the independent board checks (KiCad DRC, same-net clearance, manufacturer limits, full-width field).
+
+Manufacturer stackups and limits are kept as JSON profiles in `KiCad_flex_PCBs/fab_profiles/` (JLCPCB 2-layer flex, 1 oz, 0.2 mm for the example).
 
 
 ### Algorithm overview

@@ -3,13 +3,14 @@
 This guide covers the full workflow for building CoilGen coils as rolled 2-layer flex PCBs:
 
 1. Design the coil on a cylinder with a slit (the seam of the rolled board).
-2. Export it as a KiCad board with both copper layers in series, design rules included.
-3. Check the board: KiCad's DRC, plus a same-net check the DRC can't do.
-4. Read the board back into CoilGen and re-simulate the copper that will actually be made.
-5. Look at the coils in 3D with CoilGen's plotting functions.
-6. Build and align the coils.
+2. Pick the manufacturer profile (stackup, limits, design values).
+3. Export it as a KiCad board with both copper layers in series, the stackup and design rules included.
+4. Check the board: KiCad's DRC, a same-net check the DRC can't do, and the manufacturer limits.
+5. Read the board back into CoilGen and re-simulate the copper that will actually be made.
+6. Look at the coils in 3D with CoilGen's plotting functions.
+7. Build and align the coils.
 
-The worked example is a 3-axis gradient set for a 45 mT Halbach magnet: `Examples/halbach_flex_pcb_gradient_set.m`. It runs steps 1–4 for all three coils.
+The worked example is a 3-axis gradient set for a 45 mT Halbach magnet: `Examples/halbach_flex_pcb_gradient_set.m`. It runs steps 1–5 for all three coils.
 
 | File | Purpose |
 |---|---|
@@ -18,7 +19,10 @@ The worked example is a 3-axis gradient set for a 45 mT Halbach magnet: `Example
 | `sub_functions/import_kicad_flex_pcb.m` | `.kicad_pcb` → CoilGen result, re-evaluated with CoilGen's own field routines. |
 | `sub_functions/strip_coilgen_result.m` | Keeps only the fields the plotting functions need, so a result can be saved compactly. |
 | `Examples/halbach_flex_pcb_gradient_set.m` | Designs, exports, checks and re-simulates the Halbach gradient set. |
+| `sub_functions/check_kicad_flex_pcb.m` | Independent checks of a board file: KiCad DRC, same-net clearance, manufacturer limits, full-width field. |
+| `Examples/check_flex_pcb_boards.m` | Runs those checks on the three boards. |
 | `Examples/view_flex_pcb_coils.m` | 3D views and field plots of the re-simulated boards. |
+| `KiCad_flex_PCBs/fab_profiles/` | Manufacturer profiles (JSON): stackup, fab limits and design values. `jlcpcb_flex_2layer_1oz_25um_0p2mm.json` is used for the example. |
 | `KiCad_flex_PCBs/halbach_45mT_gradient_set/` | One KiCad project folder per coil, `coil_summary.txt` for the set. |
 
 ## Coordinate frames
@@ -64,7 +68,33 @@ coil_out=CoilGen( ...
 
 Note that `CoilGen` removes `sub_functions` from the path when it returns. Run `addpath('sub_functions')` before calling the exporter or importer.
 
-## 2. Export to KiCad
+## 2. Manufacturer profile
+
+The board is made for a specific flex process, described in a JSON profile under `KiCad_flex_PCBs/fab_profiles/`. The example uses `jlcpcb_flex_2layer_1oz_25um_0p2mm.json`, taken from [JLCPCB's flex capabilities](https://jlcpcb.com/capabilities/flex-pcb-capabilities) (checked 2026-10-05).
+
+The profile has three parts:
+- **`stackup`.** Coverlay (PI 25 µm + adhesive 25 µm), 35 µm (1 oz) copper, 25 µm polyimide core, 35 µm copper, coverlay, ENIG finish, 0.2 mm total. The board's KiCad stackup, its thickness, and the copper spacing used for the field and inductance (0.06 mm centre to centre) all come from here.
+- **`fab_limits`.** JLCPCB's minimums:
+
+  | Rule | Limit |
+  |---|---|
+  | Trace width and spacing (1 oz) | 4 mil (0.1016 mm) |
+  | Trace width tolerance | ±20 % |
+  | Via | 0.3 mm drill, 0.55 mm pad |
+  | Via ring to trace | 0.1 mm |
+  | Hole to copper | 0.2 mm |
+  | Copper to edge | 0.3 mm |
+  | Coverlay opening | 0.1 mm larger than the pad, ≥ 0.15 mm from traces |
+  | Silkscreen | text ≥ 1 mm high, lines ≥ 0.15 mm, ≥ 0.15 mm from pads |
+  | Board size | up to 234 × 490 mm |
+  | Bend radius | ≥ 10 × thickness for 2 layers |
+
+  These go into the `.kicad_pro` design rules.
+- **`design`.** The values the exporter actually uses, with margin over the limits: 0.15 mm clearance (also the KiCad net-class clearance), 0.3 mm edge clearance, 0.6/0.3 mm vias.
+
+Pass it to the exporter with `'fab_profile',file`. Options given explicitly still override the profile. After the export, every board is checked against the limits, and `report.fab_check` lists each rule with its value, its limit and whether it passes. For another manufacturer or stackup, copy the file and change the values.
+
+## 3. Export to KiCad
 
 ```matlab
 report=export_kicad_flex_pcb(coil_out,'my_coil.kicad_pcb','title','My coil', ...
@@ -87,7 +117,7 @@ What the exporter builds:
   In the example this halves the resistance.
 - **One net per turn.** Each turn on each layer is its own net, and consecutive turns are joined by KiCad net-tie footprints (`CoilGen:NetTie_Turn`). The DRC can therefore check the clearance between every pair of turns.
 - **Silkscreen.** `axis_marks` draws an axial `F.SilkS` line where the rolled coil faces a given direction (for aligning it in the magnet). `axial_label` adds arrows for the axial direction.
-- **Project file.** The design rules go into the `.kicad_pro` next to the board: clearance, edge clearance, via and drill sizes.
+- **Board setup and project file.** With a fab profile, the board gets its stackup (coverlay, copper, polyimide, ENIG, 0.2 mm) and the coverlay opening (`pad_to_mask_clearance`), and its vias are tented under the coverlay. The `.kicad_pro` gets the manufacturer limits as design rules, and the design clearance and via size as the net class.
 - **Coordinate mapping.** The board-to-cylinder mapping is written into the title block (`CoilGen mapping: ...`), which the importer uses.
 
 Exporter options (lengths in mm):
@@ -103,8 +133,9 @@ Exporter options (lengths in mm):
 | `seam_gap` | 0.5 | Gap between the two board edges at the seam once rolled. |
 | `end_margin` | 1.5 | Board extension beyond the ends of the coil surface. |
 | `tab_length`, `pad_size` | 10, 3 | Length of the feed tab past the end of the coil, and size of the solder pads. |
-| `copper_thickness` | 0.035 | Used for the resistance (1 oz = 0.035). |
-| `layer_gap` | 0.1 | `F.Cu`–`B.Cu` distance, used for the field check. |
+| `fab_profile` | '' | Manufacturer profile (JSON); sets the values below that aren't given explicitly, the stackup, the coverlay opening and the design rules, and the board is checked against it. |
+| `copper_thickness` | 0.035 | Used for the resistance (1 oz = 0.035). From the profile if given. |
+| `layer_gap` | 0.1 | `F.Cu`–`B.Cu` distance centre to centre, used for the field check. From the profile: dielectric + copper thickness. |
 | `title`, `net_prefix` | | Board title and prefix for the net names. |
 | `calc_inductance` | true | Filament (Neumann) inductance estimate. |
 | `axis_marks` | {} | `{direction (3x1, coil frame), label; ...}`: alignment lines on `F.SilkS`. |
@@ -117,24 +148,37 @@ The `report` holds:
 - the smallest same-net gap;
 - the inductance estimate, the turns per group and the number of dropped loops.
 
-## 3. Check the board
+## 4. Check the board
 
-**KiCad DRC.** It doesn't need a schematic, because every net is defined in the board file. It checks:
-- **shorts:** copper of different nets touching;
-- **clearance:** between all nets, so between all turns;
-- **continuity:** that every net is connected, so the series chain from J1 to J2 has no breaks;
-- edge clearance, and via and drill sizes.
+Each board is checked in several independent ways. `Examples/check_flex_pcb_boards.m` runs all of them on the `.kicad_pcb` files through `check_kicad_flex_pcb`. Because the checks read the board files themselves, they also cover anything edited in KiCad.
+
+| Check | What it catches | Where |
+|---|---|---|
+| **KiCad DRC** | Shorts between nets, clearance between all nets (so between all turns), unconnected items (the series chain J1–J2), edge clearance, via and drill sizes, silkscreen size and clearance, coverlay openings | `kicad-cli pcb drc`, run by `check_kicad_flex_pcb` |
+| **Same-net clearance** | A turn coming too close to itself, which the DRC can't see because it's one net | Exporter (`report.min_same_net_gap_mm`) and `check_kicad_flex_pcb` (from the file) |
+| **Manufacturer limits** | Track width, clearance, vias, edge clearance, board size and bend radius against the fab profile | Exporter (`report.fab_check`) and `check_kicad_flex_pcb` |
+| **Chain and polarity** | Branches, breaks or stray copper in the J1–J2 chain; whether J1→J2 gives the design polarity | `import_kicad_flex_pcb` (step 5) |
+| **Field of the copper** | Efficiency, linearity and field error of the board copper, against the target and the ideal turns | Exporter (Biot-Savart) and `import_kicad_flex_pcb` (CoilGen's own routines) |
+| **Full track width** | Whether the wide tracks change the field: each track is split into filaments across its width and compared with thin wires on its centre line | `check_kicad_flex_pcb` with `'coil_result'` |
+
+**KiCad DRC.** It doesn't need a schematic, because every net is defined in the board file. With a fab profile, the `.kicad_pro` holds the manufacturer's limits as rules, and the design clearance and vias as the net class. To confirm that DRC really applies the project rules, run it on a copy of a board with an impossible rule (for example `min_track_width` = 5 mm). It then reports track-width violations; with the real rules it reports none. To run the DRC on its own:
 
 ```bash
 cd KiCad_flex_PCBs/halbach_45mT_gradient_set
 for f in */*.kicad_pcb; do kicad-cli pcb drc --severity-all -o "${f%.kicad_pcb}_drc.rpt" "$f"; done
 ```
 
-**Same-net clearance.** KiCad doesn't check clearance *within* a net. A turn that came too close to itself (in a narrow tip, for example) would short part of the turn without any DRC error. The exporter narrows turns where this would happen and reports the smallest same-net gap (`report.min_same_net_gap_mm`). It warns when the gap is below the clearance.
+**Same-net clearance.** KiCad doesn't check clearance *within* a net. A turn that came too close to itself (in a narrow tip, for example) would short part of the turn without any DRC error. The exporter narrows turns where this would happen, even below the base width, and reports the smallest same-net gap, warning when it's below the clearance. `check_kicad_flex_pcb` measures it again from the board file: it samples all tracks every 0.05 mm and compares parts of a net that are far apart along the track.
 
-All three example boards pass the DRC with 0 violations and 0 unconnected items. Their same-net gaps are ≥ 0.15 mm.
+**Full track width.** The re-simulation (step 5) models every track as a thin wire along its centre. Splitting each track into 7 filaments across its real width changes the gradients by less than 0.1 % and the field by less than 0.05 % of its range, so the wide tracks don't affect the field. The current stays centred because the tracks widen symmetrically, and the copper is at least 12.5 mm from the target region.
 
-## 4. Re-simulate the manufactured copper
+**Results for the example boards:**
+- **KiCad DRC:** 0 violations and 0 unconnected items on all three.
+- **Same-net clearance:** at least 0.15 mm.
+- **JLCPCB profile:** every limit met.
+- **Re-simulation:** matches the design, and J1→J2 has the design polarity on all three.
+
+## 5. Re-simulate the manufactured copper
 
 ```matlab
 [pcb_out,pcb_check]=import_kicad_flex_pcb(coil_out,'my_coil.kicad_pcb');
@@ -150,7 +194,7 @@ Because the board file is read, the result reflects the copper as it will be mad
 
 `pcb_out` has the same fields as a CoilGen result, so the functions in `plotting` work on it. `pcb_check` holds the number of segments, ties and vias, the copper length, the resistance from the actual trace widths, the gradient (mean and spread over the target region), CoilGen's error values, and whether current from J1 to J2 has the design polarity.
 
-## 5. View the coils in 3D
+## 6. View the coils in 3D
 
 `halbach_flex_pcb_gradient_set.m` saves a compact copy of each re-simulated result next to its board (`<coil>_coilgen_pcb.mat`, about 3 MB). To open the 3D views and field plots of all three coils without rerunning the design, run this in the MATLAB desktop:
 
@@ -165,21 +209,21 @@ The views show the actual PCB copper: the spirals with their steps between turns
 
 ## Example results
 
-All values are for 1 oz copper and 0.15 mm clearance, with variable trace width up to 4 mm. The inductance is a filament estimate (±15%), and V (L) is the voltage across it for a 100 µs ramp.
+All values are for the JLCPCB profile (1 oz copper, 25 µm polyimide, 0.2 mm) and 0.15 mm clearance, with variable trace width up to 4 mm. The inductance is a filament estimate (±15%), and V (L) is the voltage across it for a 100 µs ramp. The ±20 % trace width tolerance means the real resistance can be about −17 % / +25 % off the nominal value. All three boards meet every limit in the profile.
 
 | Coil | Diameter | Track min/mean/max | Turns (both layers) | Efficiency | Non-linearity, 40 mm DSV | R | L | Current for target | V (R) | V (L) | Peak power |
 |---|---|---|---|---|---|---|---|---|---|---|---|
-| Z (bore axis), 28 mT/m | 65 mm | 0.70 / 1.54 / 4.0 mm | 72 | 7.35 mT/m/A | 0.69 % | 4.2 Ω | 71 µH | 3.8 A | 16.1 V | 2.7 V | 62 W |
-| Y, 12 mT/m | 67.5 mm | 0.60 / 1.78 / 4.0 mm | 72 | 19.5 mT/m/A | 0.71 % | 5.2 Ω | 142 µH | 0.61 A | 3.2 V | 0.9 V | 2.0 W |
+| Z (bore axis), 28 mT/m | 65 mm | 0.70 / 1.54 / 4.0 mm | 72 | 7.34 mT/m/A | 0.69 % | 4.2 Ω | 72 µH | 3.8 A | 16.1 V | 2.7 V | 62 W |
+| Y, 12 mT/m | 67.5 mm | 0.60 / 1.78 / 4.0 mm | 72 | 19.5 mT/m/A | 0.71 % | 5.2 Ω | 142 µH | 0.62 A | 3.2 V | 0.9 V | 2.0 W |
 | X (B0 axis), 12 mT/m | 70 mm | 0.85 / 1.80 / 4.0 mm | 72 | 18.9 mT/m/A | 0.18 % | 5.0 Ω | 143 µH | 0.64 A | 3.2 V | 0.9 V | 2.0 W |
 
 CoilGen re-simulation of the copper read back from the boards. The field errors are the deviation from the target field, relative to its maximum; "ideal" means the same turns as closed loops on both layers.
 
 | Coil | Gradient (mean ± spread) | R from board | Field error, board copper (max / mean) | Field error, ideal turns (max / mean) | J1→J2 |
 |---|---|---|---|---|---|
-| Z | 7.35 ± 0.05 mT/m/A | 4.23 Ω | 1.36 / 0.35 % | 1.32 / 0.29 % | design polarity |
-| Y | 19.52 ± 0.26 mT/m/A | 5.21 Ω | 3.34 / 1.05 % | 0.94 / 0.28 % | design polarity |
-| X | 18.88 ± 0.05 mT/m/A | 5.04 Ω | 0.58 / 0.18 % | 0.53 / 0.12 % | design polarity |
+| Z | 7.34 ± 0.05 mT/m/A | 4.23 Ω | 1.37 / 0.37 % | 1.33 / 0.31 % | design polarity |
+| Y | 19.49 ± 0.26 mT/m/A | 5.21 Ω | 3.44 / 1.05 % | 0.84 / 0.24 % | design polarity |
+| X | 18.86 ± 0.05 mT/m/A | 5.04 Ω | 0.61 / 0.21 % | 0.57 / 0.16 % | design polarity |
 
 The wiring adds almost nothing to the Z and X coils. On the Y coil, the extra error comes from 4 small loops that sat as side branches inside other turns. They can't be reached on two layers, so the exporter dropped them (see Limitations).
 
@@ -194,9 +238,10 @@ Renders of the top side (`F.Cu`):
 ![Y gradient](kicad_flex_Y_gradient.png)
 ![X gradient](kicad_flex_X_gradient_B0_axis.png)
 
-## 6. Building the coils
+## 7. Building the coils
 
-- Check the design-rule values in the `.kicad_pro` against your flex manufacturer before ordering: 0.15 mm clearance, 0.3 mm edge clearance, 0.6/0.3 mm vias, minimum trace 0.6 mm.
+- The boards are made for JLCPCB flex: 2 layers, 1 oz copper, 25 µm polyimide, 0.2 mm, ENIG, yellow coverlay. The KiCad stackup and design rules match, and all limits are met. For another manufacturer, make a new profile (see section 2) and re-export.
+- Optional: order a 0.2 mm PI stiffener under the solder tabs (JLCPCB offers it), so the tabs stay flat while soldering.
 - Roll each board with `F.Cu` outside. The two seam edges meet with a `seam_gap` gap, and no track crosses the seam. The rolled boards are about 123–126 mm long, plus the 10 mm feed tab sticking out of the +Z end.
 - Turn each rolled coil so that, looking down the bore in +Z (B0 from left to right):
   - the `-X LEFT` silkscreen line sits at the left side of the bore;

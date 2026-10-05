@@ -5,14 +5,18 @@
         "board_outline_line_width": 0.05
       },
       "rules": {
-        "min_clearance": 0.15,
+        "min_clearance": 0.1016,
         "min_copper_edge_clearance": 0.3,
-        "min_track_width": 0.1,
-        "min_via_diameter": 0.6,
-        "min_via_annular_width": 0.15,
+        "min_track_width": 0.1016,
+        "min_via_diameter": 0.55,
+        "min_via_annular_width": 0.125,
         "min_through_hole_diameter": 0.3,
         "min_hole_clearance": 0.2,
-        "min_hole_to_hole": 0.25
+        "min_hole_to_hole": 0.25,
+        "min_text_height": 1,
+        "min_text_thickness": 0.15,
+        "min_silk_clearance": 0.15,
+        "solder_mask_to_copper_clearance": 0.15
       },
       "rule_severities": {
         "lib_footprint_issues": "ignore",

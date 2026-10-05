@@ -37,6 +37,10 @@ axis_marks={[0;0;-1], '-X LEFT (looking down +Z)'; ...
 
 rise_time=100e-6;  % assumed gradient ramp time for the driver voltage
 
+%manufacturer: stackup, design rules and limits (JLCPCB flex, 2 layers, 1 oz, 25 um PI, 0.2 mm)
+fab_profile=fullfile(pwd,'KiCad_flex_PCBs','fab_profiles','jlcpcb_flex_2layer_1oz_25um_0p2mm.json');
+fab=jsondecode(fileread(fab_profile));
+
 results=struct();
 for coil_ind=1:size(coils,1)
 [coil_name,shape,radius,slit_center,target_gradient,positive_gradient]=coils{coil_ind,:};
@@ -70,15 +74,12 @@ report=export_kicad_flex_pcb(coil_out,pcb_file, ...
     'axis_marks',axis_marks, ...
     'axial_label','+Z into bore', ...
     'positive_gradient',positive_gradient, ...
-    'clearance',0.15, ...
-    'copper_thickness',0.035, ...
-    'via_diameter',0.6, ...
-    'via_drill',0.3);
+    'fab_profile',fab_profile);
 
 %% Re-simulate the manufactured copper with CoilGen
 %read the board file back (J1 to J2), use it as the wire path of the coil
 %and evaluate the field with CoilGen's own routines
-[pcb_layouts.(coil_name).out,pcb_check]=import_kicad_flex_pcb(coil_out,pcb_file,'copper_thickness',0.035);
+[pcb_layouts.(coil_name).out,pcb_check]=import_kicad_flex_pcb(coil_out,pcb_file,'copper_thickness',fab.stackup.copper_thickness_mm);
 report.pcb_check=pcb_check;
 %compact result of the re-simulation for the 3D views (view_flex_pcb_coils.m)
 coil_layouts=struct('out',strip_coilgen_result(pcb_layouts.(coil_name).out)); %#ok<NASGU>
@@ -124,6 +125,15 @@ fprintf(out_id,'%-22s %9.2f %9.3f %8.2f %7.2f / %5.2f %8.2f / %5.2f %10s\n',name
     e.max_rel_error_unconnected_contours_vs_target,e.mean_rel_error_unconnected_contours_vs_target,polarity{1+c.current_J1_to_J2_matches_design});
 end
 fprintf(out_id,'err: deviation from the target field relative to its maximum; ideal = the same turns as closed loops on both layers.\n');
+fprintf(out_id,'\nManufacturer check against %s:\n',fab.name);
+for i=1:numel(names)
+fc=results.(names{i}).fab_check;
+failed={fc(~[fc.ok]).item};
+if isempty(failed), status='all limits met'; else, status=['NOT MET: ' strjoin(failed,', ')]; end
+fprintf(out_id,'%-22s %s (min track %.2f mm, board %.1f x %.1f mm)\n',names{i},status,results.(names{i}).min_track_width_mm,results.(names{i}).board_size_mm);
+end
+fprintf(out_id,'Resistance tolerance from the +-%.0f%% track width tolerance: about %+.0f%% / %+.0f%%.\n',fab.fab_limits.track_width_tolerance*100, ...
+    (1/(1+fab.fab_limits.track_width_tolerance)-1)*100,(1/(1-fab.fab_limits.track_width_tolerance)-1)*100);
 end
 fclose(fid);
 
