@@ -19,7 +19,7 @@ The worked example is a 3-axis gradient set for a 45 mT Halbach magnet: `Example
 | `sub_functions/import_kicad_flex_pcb.m` | `.kicad_pcb` → CoilGen result, re-evaluated with CoilGen's own field routines. |
 | `sub_functions/strip_coilgen_result.m` | Keeps only the fields the plotting functions need, so a result can be saved compactly. |
 | `Examples/halbach_flex_pcb_gradient_set.m` | Designs, exports, checks and re-simulates the Halbach gradient set. |
-| `sub_functions/export_kicad_step.m` | STEP model of a board (board body, copper, silkscreen) with `kicad-cli`, zipped for git. |
+| `sub_functions/export_kicad_step.m` | STEP model of a board (board body, copper tracks, silkscreen; no pads or vias) with `kicad-cli`, zipped for git. |
 | `sub_functions/find_kicad_cli.m` | Locates KiCad's command-line tool. |
 | `sub_functions/run_kicad_cli.m` | Runs `kicad-cli` with a time limit (Java `ProcessBuilder`, not `system()`). |
 | `sub_functions/check_kicad_flex_pcb.m` | Independent checks of a board file: KiCad DRC, same-net clearance, manufacturer limits, full-width field. |
@@ -153,7 +153,7 @@ The `report` holds:
 
 ### STEP models
 
-Each board folder has a 3D model of the flat board: `<coil>.step.zip`, which contains `<coil>.step`. It has the 0.2 mm board body, both copper layers (tracks, pads, vias) and the silkscreen. KiCad exports the board flat, because it has no notion of the rolled flex PCB.
+Each board folder has a 3D model of the flat board: `<coil>.step.zip`, which contains `<coil>.step`. It has the 0.2 mm board body, the copper tracks on both layers and the silkscreen. Pads (the J1/J2 solder pads and the net ties between turns) and vias are left out. Use `'include_pads',true` or `'include_vias',true` to keep them. `kicad-cli` exports vias together with the tracks, so they are removed from a temporary copy of the board before the export. KiCad exports the board flat, because it has no notion of the rolled flex PCB.
 
 With all the copper the STEP files are 90–125 MB, over GitHub's 100 MB limit, so git keeps the zipped version (15–22 MB) and ignores the plain `.step`. Unzip it to open it in a CAD program.
 
@@ -161,7 +161,7 @@ With all the copper the STEP files are 90–125 MB, over GitHub's 100 MB limit, 
 export_kicad_step('KiCad_flex_PCBs/halbach_45mT_gradient_set/Z_gradient_bore_axis/Z_gradient_bore_axis.kicad_pcb');
 ```
 
-This needs `kicad-cli` (installed with KiCad 8 or later). All `kicad-cli` calls go through `run_kicad_cli`, which starts the process with Java's `ProcessBuilder` and a hard time limit. MATLAB's `system()` can hang on macOS after longer child processes. It runs `kicad-cli pcb export step --no-components --include-tracks --include-pads --include-silkscreen` and zips the result.
+This needs `kicad-cli` (installed with KiCad 8 or later). All `kicad-cli` calls go through `run_kicad_cli`, which starts the process with Java's `ProcessBuilder` and a hard time limit. MATLAB's `system()` can hang on macOS after longer child processes. It runs `kicad-cli pcb export step --no-components --include-tracks --include-silkscreen` and zips the result.
 
 > **Regenerate the STEPs whenever a board changes.** That includes a re-export from CoilGen, a new fab profile, or an edit made in KiCad. `halbach_flex_pcb_gradient_set.m` exports them automatically after every board export. After a manual edit in KiCad, run `export_kicad_step` on the edited board, then commit the new `.step.zip` together with the `.kicad_pcb`.
 
