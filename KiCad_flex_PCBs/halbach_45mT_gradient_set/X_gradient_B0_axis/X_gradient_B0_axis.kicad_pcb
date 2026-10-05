@@ -11,6 +11,7 @@
 		(title "X gradient B0 axis")
 		(comment 1 "F.Cu is the outside of the rolled cylinder; J1/J2 on the tab past the end of the coil")
 		(comment 2 "CoilGen mapping: x0=11.2500 y0=83.2201 layer_gap=0.0600")
+		(comment 3 "CoilGen cylinder: radius=37.5000 th0=2.04712864 rot_axis=0 1 0 rot_angle=1.57079633")
 	)
 	(layers
 		(0 "F.Cu" signal)

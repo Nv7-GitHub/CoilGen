@@ -4,7 +4,7 @@ This guide covers the full workflow for building CoilGen coils as rolled 2-layer
 
 1. Design the coil on a cylinder with a slit (the seam of the rolled board).
 2. Pick the manufacturer profile (stackup, limits, design values).
-3. Export it as a KiCad board with both copper layers in series, the stackup and design rules included, plus a STEP model.
+3. Export it as a KiCad board with both copper layers in series, the stackup and design rules included, plus a STEP model of the rolled board.
 4. Check the board: KiCad's DRC, a same-net check the DRC can't do, and the manufacturer limits.
 5. Read the board back into CoilGen and re-simulate the copper that will actually be made.
 6. Look at the coils in 3D with CoilGen's plotting functions.
@@ -19,9 +19,10 @@ The worked example is a 3-axis gradient set for a 45 mT Halbach magnet: `Example
 | `sub_functions/import_kicad_flex_pcb.m` | `.kicad_pcb` → CoilGen result, re-evaluated with CoilGen's own field routines. |
 | `sub_functions/strip_coilgen_result.m` | Keeps only the fields the plotting functions need, so a result can be saved compactly. |
 | `Examples/halbach_flex_pcb_gradient_set.m` | Designs, exports, checks and re-simulates the Halbach gradient set. |
-| `sub_functions/export_kicad_step.m` | STEP model of a board (board body, copper tracks, silkscreen; no pads or vias) with `kicad-cli`, zipped for git. |
+| `sub_functions/export_rolled_step.m` | STEP model of the board rolled onto its cylinder (board body, copper, silkscreen as separate colored bodies), zipped for git. |
+| `sub_functions/rolled_flex_pcb_step.py` | Builds that STEP: reads the board with KiCad's Python module and wraps it onto the cylinder with OpenCASCADE. |
 | `sub_functions/find_kicad_cli.m` | Locates KiCad's command-line tool. |
-| `sub_functions/run_kicad_cli.m` | Runs `kicad-cli` with a time limit (Java `ProcessBuilder`, not `system()`). |
+| `sub_functions/run_kicad_cli.m` | Runs `kicad-cli` (or Python) with a time limit (Java `ProcessBuilder`, not `system()`). |
 | `sub_functions/check_kicad_flex_pcb.m` | Independent checks of a board file: KiCad DRC, same-net clearance, manufacturer limits, full-width field. |
 | `Examples/check_flex_pcb_boards.m` | Runs those checks on the three boards. |
 | `Examples/view_flex_pcb_coils.m` | 3D views and field plots of the re-simulated boards. |
@@ -153,17 +154,38 @@ The `report` holds:
 
 ### STEP models
 
-Each board folder has a 3D model of the flat board: `<coil>.step.zip`, which contains `<coil>.step`. It has the 0.2 mm board body, the copper tracks on both layers and the silkscreen. Pads (the J1/J2 solder pads and the net ties between turns) and vias are left out. Use `'include_pads',true` or `'include_vias',true` to keep them. `kicad-cli` exports vias together with the tracks, so they are removed from a temporary copy of the board before the export. KiCad exports the board flat, because it has no notion of the rolled flex PCB.
+Each board folder has a 3D model of the board rolled onto its cylinder: `<coil>.step.zip`, which contains `<coil>.step`. It has four named, colored bodies:
 
-With all the copper the STEP files are 90–125 MB, over GitHub's 100 MB limit, so git keeps the zipped version (15–22 MB) and ignores the plain `.step`. Unzip it to open it in a CAD program.
+| Body | What | Color |
+|---|---|---|
+| `Board` | the 0.2 mm board as a solid tube with the seam gap and the feed tab | yellow (coverlay) |
+| `F.Cu` | copper on the outside (tracks and net ties) | copper |
+| `B.Cu` | copper on the inside | copper |
+| `F.SilkS` | silkscreen (alignment lines and text) | white |
+
+Copper and silkscreen are surfaces, each layer merged into one body. As in KiCad's own STEP export they sit on the faces of the board body, which is centred on the middle of the copper stackup. Pads (the J1/J2 solder pads and the net-tie pads) and vias are left out; use `'include_pads',true` to keep the pads. The outlines are simplified to 0.02 mm (`'tolerance'`), well under the 0.15 mm clearance.
+
+The coil diameter (65 / 70 / 75 mm) is the diameter of `F.Cu`. With the 0.2 mm stackup the board is about 0.25 mm smaller (ID) and 0.14 mm larger (OD), so the Z board is about 64.75 mm ID and 65.14 mm OD.
+
+The example writes the models in the magnet frame (`'frame'`: bore along z, B0 along x), so the three files line up when you open them together: the coils nest at the right radii and the tabs come out of the +Z end at the angles in section 7. Each file is about 20 MB (about 4 MB zipped). Git keeps the zipped version and ignores the plain `.step`.
 
 ```matlab
-export_kicad_step('KiCad_flex_PCBs/halbach_45mT_gradient_set/Z_gradient_bore_axis/Z_gradient_bore_axis.kicad_pcb');
+export_rolled_step('KiCad_flex_PCBs/halbach_45mT_gradient_set/Z_gradient_bore_axis/Z_gradient_bore_axis.kicad_pcb', ...
+    'frame',[0 0 1; 0 -1 0; 1 0 0]);   % CoilGen frame -> magnet frame
 ```
 
-This needs `kicad-cli` (installed with KiCad 8 or later). All `kicad-cli` calls go through `run_kicad_cli`, which starts the process with Java's `ProcessBuilder` and a hard time limit. MATLAB's `system()` can hang on macOS after longer child processes. It runs `kicad-cli pcb export step --no-components --include-tracks --include-silkscreen` and zips the result.
+`rolled_flex_pcb_step.py` reads the board with KiCad's Python module (`pcbnew`, KiCad 8 or later), which merges the tracks of each layer and renders the silkscreen text. It then wraps each outline onto the cylinder. Every straight edge on the board becomes a helix on the cylinder, so the geometry is exact, not faceted. The cylinder (radius, seam angle, rotation) comes from the `CoilGen mapping` and `CoilGen cylinder` lines that `export_kicad_flex_pcb` writes into the title block.
 
-> **Regenerate the STEPs whenever a board changes.** That includes a re-export from CoilGen, a new fab profile, or an edit made in KiCad. `halbach_flex_pcb_gradient_set.m` exports them automatically after every board export. After a manual edit in KiCad, run `export_kicad_step` on the edited board, then commit the new `.step.zip` together with the `.kicad_pcb`.
+It needs a Python with `cadquery-ocp`, `shapely` and `numpy`. `export_rolled_step` uses `.venv` in the CoilGen folder, or the Python given with `'python'` or in `COILGEN_PYTHON`:
+
+```bash
+python3.12 -m venv .venv      # cadquery-ocp has wheels up to Python 3.13
+.venv/bin/pip install cadquery-ocp shapely numpy
+```
+
+It also runs on its own: `.venv/bin/python sub_functions/rolled_flex_pcb_step.py <board>.kicad_pcb [--frame ...] [--pads]`.
+
+> **Regenerate the STEPs whenever a board changes.** That includes a re-export from CoilGen, a new fab profile, or an edit made in KiCad. `halbach_flex_pcb_gradient_set.m` exports them automatically after every board export. After a manual edit in KiCad, run `export_rolled_step` on the edited board, then commit the new `.step.zip` together with the `.kicad_pcb`.
 
 ## 4. Check the board
 

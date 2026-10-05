@@ -1,6 +1,6 @@
 function [status,output]=run_kicad_cli(cli,args,timeout_s)
-%Run kicad-cli with a hard time limit.
-%cli: path of kicad-cli, args: cell array of arguments, timeout_s: limit in
+%Run kicad-cli (or another program, e.g. Python) with a hard time limit.
+%cli: path of kicad-cli or the program, args: cell array of arguments, timeout_s: limit in
 %seconds (default 300). status is the exit code, -1 on a timeout.
 %
 %The process is started with Java's ProcessBuilder instead of system():
@@ -40,6 +40,6 @@ output=fileread(log_file);
 delete(log_file);
 end
 if ~finished
-output=sprintf('kicad-cli timed out after %d s.\n%s',round(timeout_s),output);
+output=sprintf('%s timed out after %d s.\n%s',cli,round(timeout_s),output);
 end
 end

@@ -7,3 +7,6 @@ _autosave-*
 *.lck
 .DS_Store
 *.step
+
+# Python environment for the rolled STEP models (sub_functions/rolled_flex_pcb_step.py)
+.venv/

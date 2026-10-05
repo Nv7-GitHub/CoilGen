@@ -77,6 +77,7 @@ p=in.slit_cylinder_mesh_parameter_list;
 geo.height=p(1)*1e3;
 geo.r=p(2)*1e3;
 geo.rot=calc_3d_rotation_matrix_by_vector(p(5:7)',p(8));
+geo.rot_axis=p(5:7)/norm(p(5:7)); geo.rot_angle=p(8); %for the rolled STEP model
 geo.slit_w=p(10)*1e3;
 geo.th0=p(9)+p(10)/(2*p(2)); %angle of the board start edge
 geo.c_mesh=geo.r*(2*pi)-geo.slit_w;
@@ -872,7 +873,8 @@ board_thickness=board.opt.fab.stackup.board_thickness_mm;
 mask_expansion=board.opt.fab.fab_limits.coverlay_opening_expansion_mm;
 end
 fprintf(fid,'\t(general\n\t\t(thickness %.4f)\n\t\t(legacy_teardrops no)\n\t)\n\t(paper "A3")\n',board_thickness);
-fprintf(fid,'\t(title_block\n\t\t(title "%s")\n\t\t(comment 1 "F.Cu is the outside of the rolled cylinder; J1/J2 on the tab past the end of the coil")\n\t\t(comment 2 "CoilGen mapping: x0=%.4f y0=%.4f layer_gap=%.4f")\n\t)\n',board.opt.title,x0,y0,board.opt.layer_gap);
+fprintf(fid,'\t(title_block\n\t\t(title "%s")\n\t\t(comment 1 "F.Cu is the outside of the rolled cylinder; J1/J2 on the tab past the end of the coil")\n\t\t(comment 2 "CoilGen mapping: x0=%.4f y0=%.4f layer_gap=%.4f")\n\t\t(comment 3 "CoilGen cylinder: radius=%.4f th0=%.8f rot_axis=%g %g %g rot_angle=%.8f")\n\t)\n', ...
+    board.opt.title,x0,y0,board.opt.layer_gap,board.geo.r,board.geo.th0,board.geo.rot_axis,board.geo.rot_angle);
 fprintf(fid,['\t(layers\n\t\t(0 "F.Cu" signal)\n\t\t(31 "B.Cu" signal)\n\t\t(36 "B.SilkS" user "B.Silkscreen")\n' ...
     '\t\t(37 "F.SilkS" user "F.Silkscreen")\n\t\t(38 "B.Mask" user)\n\t\t(39 "F.Mask" user)\n\t\t(44 "Edge.Cuts" user)\n' ...
     '\t\t(46 "B.CrtYd" user "B.Courtyard")\n\t\t(47 "F.CrtYd" user "F.Courtyard")\n\t\t(48 "B.Fab" user)\n\t\t(49 "F.Fab" user)\n\t)\n']);
