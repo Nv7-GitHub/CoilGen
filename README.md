@@ -46,7 +46,7 @@ See [Documentation/KiCad_flex_PCB_export.md](Documentation/KiCad_flex_PCB_export
 - `Examples/view_flex_pcb_coils.m`, which shows that set in 3D;
 - `Examples/check_flex_pcb_boards.m`, which runs the independent board checks (KiCad DRC, same-net clearance, manufacturer limits, full-width field).
 
-Manufacturer stackups and limits are kept as JSON profiles in `KiCad_flex_PCBs/fab_profiles/` (JLCPCB 2-layer flex, 1 oz, 0.2 mm for the example).
+Manufacturer stackups and limits are kept as JSON profiles in `KiCad_flex_PCBs/fab_profiles/` (JLCPCB 2-layer flex, 1 oz, 0.2 mm for the example). Each board also has a STEP model (`<coil>.step.zip`) made with `export_kicad_step`. Regenerate it whenever the board changes.
 
 
 ### Algorithm overview

@@ -4,7 +4,7 @@ This guide covers the full workflow for building CoilGen coils as rolled 2-layer
 
 1. Design the coil on a cylinder with a slit (the seam of the rolled board).
 2. Pick the manufacturer profile (stackup, limits, design values).
-3. Export it as a KiCad board with both copper layers in series, the stackup and design rules included.
+3. Export it as a KiCad board with both copper layers in series, the stackup and design rules included, plus a STEP model.
 4. Check the board: KiCad's DRC, a same-net check the DRC can't do, and the manufacturer limits.
 5. Read the board back into CoilGen and re-simulate the copper that will actually be made.
 6. Look at the coils in 3D with CoilGen's plotting functions.
@@ -19,6 +19,8 @@ The worked example is a 3-axis gradient set for a 45 mT Halbach magnet: `Example
 | `sub_functions/import_kicad_flex_pcb.m` | `.kicad_pcb` → CoilGen result, re-evaluated with CoilGen's own field routines. |
 | `sub_functions/strip_coilgen_result.m` | Keeps only the fields the plotting functions need, so a result can be saved compactly. |
 | `Examples/halbach_flex_pcb_gradient_set.m` | Designs, exports, checks and re-simulates the Halbach gradient set. |
+| `sub_functions/export_kicad_step.m` | STEP model of a board (board body, copper, silkscreen) with `kicad-cli`, zipped for git. |
+| `sub_functions/find_kicad_cli.m` | Locates KiCad's command-line tool. |
 | `sub_functions/check_kicad_flex_pcb.m` | Independent checks of a board file: KiCad DRC, same-net clearance, manufacturer limits, full-width field. |
 | `Examples/check_flex_pcb_boards.m` | Runs those checks on the three boards. |
 | `Examples/view_flex_pcb_coils.m` | 3D views and field plots of the re-simulated boards. |
@@ -147,6 +149,20 @@ The `report` holds:
 - the resistance and the track width minimum, mean and maximum;
 - the smallest same-net gap;
 - the inductance estimate, the turns per group and the number of dropped loops.
+
+### STEP models
+
+Each board folder has a 3D model of the flat board: `<coil>.step.zip`, which contains `<coil>.step`. It has the 0.2 mm board body, both copper layers (tracks, pads, vias) and the silkscreen. KiCad exports the board flat, because it has no notion of the rolled flex PCB.
+
+With all the copper the STEP files are 90–125 MB, over GitHub's 100 MB limit, so git keeps the zipped version (15–22 MB) and ignores the plain `.step`. Unzip it to open it in a CAD program.
+
+```matlab
+export_kicad_step('KiCad_flex_PCBs/halbach_45mT_gradient_set/Z_gradient_bore_axis/Z_gradient_bore_axis.kicad_pcb');
+```
+
+This needs `kicad-cli` (installed with KiCad 8 or later). It runs `kicad-cli pcb export step --no-components --include-tracks --include-pads --include-silkscreen` and zips the result.
+
+> **Regenerate the STEPs whenever a board changes.** That includes a re-export from CoilGen, a new fab profile, or an edit made in KiCad. `halbach_flex_pcb_gradient_set.m` exports them automatically after every board export. After a manual edit in KiCad, run `export_kicad_step` on the edited board, then commit the new `.step.zip` together with the `.kicad_pcb`.
 
 ## 4. Check the board
 

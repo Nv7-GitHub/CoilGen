@@ -76,6 +76,11 @@ report=export_kicad_flex_pcb(coil_out,pcb_file, ...
     'positive_gradient',positive_gradient, ...
     'fab_profile',fab_profile);
 
+%% 3D model (STEP) of the board: board body, copper and silkscreen
+%regenerated with every export so it always matches the .kicad_pcb;
+%<coil>.step.zip is the version kept in git
+export_kicad_step(pcb_file);
+
 %% Re-simulate the manufactured copper with CoilGen
 %read the board file back (J1 to J2), use it as the wire path of the coil
 %and evaluate the field with CoilGen's own routines

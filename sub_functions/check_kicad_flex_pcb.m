@@ -65,14 +65,7 @@ end
 
 function drc=run_kicad_drc(pcb_file,kicad_cli)
 drc=struct('ran',false,'violations',NaN,'unconnected',NaN,'by_type',struct());
-candidates={kicad_cli,'kicad-cli','/opt/homebrew/bin/kicad-cli','/usr/local/bin/kicad-cli', ...
-    '/Applications/KiCad/KiCad.app/Contents/MacOS/kicad-cli','C:\Program Files\KiCad\bin\kicad-cli.exe'};
-cli='';
-for c=candidates
-if isempty(c{1}), continue; end
-[status,~]=system(['"' c{1} '" version']);
-if status==0, cli=c{1}; break; end
-end
+cli=find_kicad_cli(kicad_cli);
 if isempty(cli)
 warning('kicad-cli not found: KiCad DRC skipped.');
 return;
